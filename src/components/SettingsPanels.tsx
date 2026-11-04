@@ -11,12 +11,15 @@ import {
   type LayoutPref,
   type Settings,
   type VideoQuality,
+  type VoiceFx,
 } from '../lib/settings';
 import { setSoundsSink, sounds } from '../lib/sounds';
 import { audioLevels } from '../lib/audioLevel';
 import { BG_PRESETS, MAX_CUSTOM, addCustomBg, getCustomBgs, presetThumb, removeCustomBg } from '../lib/backgrounds';
 import { FILTERS, cssFilterFor } from '../rtc/effects';
 import { supportedCodecs } from '../rtc/tuning';
+import { VOICES } from '../rtc/voice';
+import { captionsSupported } from '../rtc/captions';
 import { EGGS, THEMES } from '../lib/themes';
 import { DeviceSelect, Toggle } from './controls';
 import { LevelMeter, VideoView, supportsSinkSelection } from './media';
@@ -111,6 +114,13 @@ export function AudioPanel({ local }: { local: LocalMedia }) {
           onChange={(v) => void setProcessing({ echoCancellation: v })}
         />
         <Toggle label="Automatic gain control" checked={s.autoGainControl} onChange={(v) => void setProcessing({ autoGainControl: v })} />
+        <Select<VoiceFx>
+          label="Voice changer"
+          value={s.voiceFx}
+          onChange={(v) => updateSettings({ voiceFx: v })}
+          options={VOICES.map((v) => ({ value: v.id, label: `${v.emoji} ${v.label}` }))}
+          hint="Everyone hears the changed voice"
+        />
         {busy && <p className="muted small">Applying…</p>}
       </section>
       <section className="panel-section">
@@ -340,6 +350,13 @@ export function EffectsPanel({ local }: { local: LocalMedia }) {
           ))}
         </div>
         <Toggle
+          label="Auto-framing"
+          hint="Zooms in and follows you so you stay centered"
+          checked={s.autoFrame}
+          onChange={(v) => updateSettings({ autoFrame: v })}
+          testId="auto-frame"
+        />
+        <Toggle
           label="Low-light boost"
           hint="Brightens dim rooms"
           checked={s.lowLightBoost}
@@ -433,6 +450,41 @@ export function MeetingPanel() {
         <Toggle label="Join with microphone muted" checked={s.joinMuted} onChange={(v) => updateSettings({ joinMuted: v })} />
         <Toggle label="Join with camera off" checked={s.joinCameraOff} onChange={(v) => updateSettings({ joinCameraOff: v })} />
         <Toggle label="Push to talk" hint="While muted, hold Space to talk" checked={s.pushToTalk} onChange={(v) => updateSettings({ pushToTalk: v })} />
+        <Toggle
+          label="Share my captions"
+          hint={
+            captionsSupported()
+              ? "When someone turns on captions, your browser transcribes your mic (Chrome/Edge use their speech service for this)"
+              : 'Live captions need Chrome or Edge'
+          }
+          checked={s.shareCaptions}
+          onChange={(v) => updateSettings({ shareCaptions: v })}
+        />
+        <Select<string>
+          label="Caption language (your speech)"
+          value={s.captionsLang}
+          onChange={(v) => updateSettings({ captionsLang: v })}
+          options={[
+            { value: '', label: `Browser default (${navigator.language})` },
+            ...[
+              ['en-US', 'English (US)'],
+              ['en-GB', 'English (UK)'],
+              ['es-ES', 'Español'],
+              ['fr-FR', 'Français'],
+              ['de-DE', 'Deutsch'],
+              ['it-IT', 'Italiano'],
+              ['pt-BR', 'Português (BR)'],
+              ['nl-NL', 'Nederlands'],
+              ['pl-PL', 'Polski'],
+              ['tr-TR', 'Türkçe'],
+              ['ru-RU', 'Русский'],
+              ['hi-IN', 'हिन्दी'],
+              ['ja-JP', '日本語'],
+              ['ko-KR', '한국어'],
+              ['zh-CN', '中文'],
+            ].map(([value, label]) => ({ value, label })),
+          ]}
+        />
         <Toggle label="Warn me when I talk while muted" checked={s.mutedWarning} onChange={(v) => updateSettings({ mutedWarning: v })} />
       </section>
       <section className="panel-section">
@@ -443,6 +495,8 @@ export function MeetingPanel() {
           <li><kbd>Space</kbd> (hold, while muted) Push to talk</li>
           <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> Raise / lower hand</li>
           <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd> Open chat</li>
+          <li><kbd>1</kbd>-<kbd>9</kbd> Soundboard pads (Tools open)</li>
+          <li><kbd>?</kbd> Show shortcuts in a call</li>
           <li><kbd>Esc</kbd> Close panels</li>
         </ul>
       </section>

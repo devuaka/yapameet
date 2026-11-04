@@ -128,6 +128,17 @@ export const VideoTile = memo(function VideoTile({
         </div>
       )}
 
+      {!showDetails && !p.isLocal && !p.leaving && kind === 'cam' && p.quality != null && (
+        <div className={`net-bars q${p.quality}`} title={['No connection', 'Poor connection', 'Fair connection', 'Good connection', 'Excellent connection'][p.quality]} data-testid="net-bars" data-quality={p.quality}>
+          <i />
+          <i />
+          <i />
+          <i />
+        </div>
+      )}
+
+      {p.recording && kind === 'cam' && !p.leaving && <div className="tile-rec" title="Recording">REC</div>}
+
       {p.hand && kind === 'cam' && !p.leaving && (
         <div className="hand-badge" title="Hand raised" data-testid="hand-badge">
           <Hand size={16} />

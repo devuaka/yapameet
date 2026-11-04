@@ -33,9 +33,11 @@ export interface EffectOptions {
   bgImage: string;
   filter: FilterId;
   lowLight: boolean;
+  /** Keep the person centered (zooms in and follows, using the segmentation mask). */
+  autoFrame: boolean;
 }
 
-export const effectsNeeded = (o: EffectOptions) => o.bg !== 'none' || o.filter !== 'none' || o.lowLight;
+export const effectsNeeded = (o: EffectOptions) => o.bg !== 'none' || o.filter !== 'none' || o.lowLight || o.autoFrame;
 
 export function cssFilterFor(o: Pick<EffectOptions, 'filter' | 'lowLight'>) {
   const parts = [o.filter !== 'none' ? FILTERS[o.filter].css : '', o.lowLight ? LOW_LIGHT : ''].filter(Boolean);
@@ -131,6 +133,8 @@ export class EffectsPipeline {
   private tinyCtx = ctx2d(this.tiny);
   private w = 0;
   private h = 0;
+  /** Current auto-framing crop (0..1 of the frame), eased toward the target. */
+  private crop = { x: 0, y: 0, s: 1 };
   private cleanup: () => void = () => {};
 
   constructor(
@@ -158,7 +162,7 @@ export class EffectsPipeline {
 
   private async prepare() {
     const o = this.opts;
-    if (o.bg !== 'none' && !this.seg && !this.segTried) {
+    if ((o.bg !== 'none' || o.autoFrame) && !this.seg && !this.segTried) {
       this.segTried = true;
       this.seg = await getSegmenter();
       if (!this.seg) this.segTried = false; // allow a retry later
@@ -225,12 +229,46 @@ export class EffectsPipeline {
     this.segEvery = took > 22 ? 2 : 1;
   }
 
+  /** Find the person in the mask and ease the crop toward a centered, zoomed frame. */
+  private updateCrop() {
+    const sw = this.small.width;
+    const sh = this.small.height;
+    const m = this.prevMask;
+    let minX = sw, minY = sh, maxX = -1, maxY = -1;
+    if (this.hasMask) {
+      for (let y = 0; y < sh; y += 2) {
+        for (let x = 0; x < sw; x += 2) {
+          if (m[y * sw + x] > 0.5) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+    }
+    let target = { x: 0, y: 0, s: 1 };
+    if (maxX > minX && maxY > minY) {
+      const bw = (maxX - minX) / sw;
+      const bh = (maxY - minY) / sh;
+      // Keep head and shoulders with room around them; never zoom past 2x.
+      const s = Math.min(1, Math.max(0.5, Math.max(bw * 1.6, bh * 1.35)));
+      const cx = (minX + maxX) / 2 / sw;
+      const cy = minY / sh + bh * 0.42;
+      target = { s, x: Math.min(1 - s, Math.max(0, cx - s / 2)), y: Math.min(1 - s, Math.max(0, cy - s / 2)) };
+    }
+    const k = 0.06;
+    this.crop = { x: this.crop.x + (target.x - this.crop.x) * k, y: this.crop.y + (target.y - this.crop.y) * k, s: this.crop.s + (target.s - this.crop.s) * k };
+    return this.crop;
+  }
+
   /** Composite one camera frame into the output canvas. */
   private render(src: CanvasImageSource, w: number, h: number) {
     this.resize(w, h);
     const o = this.opts;
     const filter = cssFilterFor(o);
-    const post = filter !== 'none' || o.filter === 'pixel';
+    const post = filter !== 'none' || o.filter === 'pixel' || o.autoFrame;
+    if (o.autoFrame && o.bg === 'none') this.updateMask(src);
     const target = post ? this.compCtx : this.outCtx;
 
     if (o.bg !== 'none') {
@@ -267,6 +305,11 @@ export class EffectsPipeline {
 
     if (post) {
       const g = this.outCtx;
+      const c = o.autoFrame ? this.updateCrop() : { x: 0, y: 0, s: 1 };
+      const csx = c.x * w;
+      const csy = c.y * h;
+      const csw = c.s * w;
+      const csh = c.s * h;
       if (o.filter === 'pixel') {
         const tw = Math.max(16, Math.round(w / 14));
         const th = Math.max(9, Math.round(h / 14));
@@ -275,14 +318,14 @@ export class EffectsPipeline {
           this.tiny.height = th;
         }
         this.tinyCtx.imageSmoothingEnabled = true;
-        this.tinyCtx.drawImage(this.comp, 0, 0, tw, th);
+        this.tinyCtx.drawImage(this.comp, csx, csy, csw, csh, 0, 0, tw, th);
         g.imageSmoothingEnabled = false;
         g.filter = filter;
         g.drawImage(this.tiny, 0, 0, w, h);
         g.imageSmoothingEnabled = true;
       } else {
         g.filter = filter;
-        g.drawImage(this.comp, 0, 0);
+        g.drawImage(this.comp, csx, csy, csw, csh, 0, 0, w, h);
       }
       g.filter = 'none';
     }

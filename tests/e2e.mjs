@@ -171,6 +171,40 @@ const boardEnergy = (page) =>
     return 0;
   });
 
+
+const openTools = async (page) => {
+  if (!(await page.locator('[data-testid="tools-panel"]').count())) await page.locator('[data-testid="ctrl-tools"]').click();
+  await page.locator('[data-testid="tools-panel"]').waitFor();
+};
+const closeSide = async (page) => {
+  for (const id of ['tools-panel', 'polls-panel']) {
+    if (await page.locator(`[data-testid="${id}"]`).count()) await page.locator(`[data-testid="${id}"] [aria-label^="Close"]`).click();
+  }
+};
+/** Count non-background pixels on the whiteboard canvas. */
+const inkPixels = (page) =>
+  page.evaluate(() => {
+    const c = document.querySelector('[data-testid="wb-canvas"]');
+    if (!c || !c.width) return -1;
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 16) if (d[i] < 200 || d[i + 1] < 200) n++;
+    return n;
+  });
+const drawLine = async (page, from, to) => {
+  const box = await page.locator('[data-testid="wb-canvas"]').boundingBox();
+  await page.mouse.move(box.x + box.width * from[0], box.y + box.height * from[1]);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) {
+    await page.mouse.move(box.x + box.width * (from[0] + ((to[0] - from[0]) * i) / 12), box.y + box.height * (from[1] + ((to[1] - from[1]) * i) / 12));
+  }
+  await page.mouse.up();
+};
+const downloadSize = async (dl) => {
+  const { statSync } = await import('node:fs');
+  return statSync(await dl.path()).size;
+};
+
 let A, B;
 
 async function joinMeeting(p, code, name) {
@@ -644,6 +678,142 @@ async function main() {
       return `remote video ${frames} in the mini player; mute/unmute from inside it reached B`;
     });
 
+    await step('Signal bars show connection quality on remote tiles', async () => {
+      const q = await until(async () => Number(await A.page.locator('[data-testid="net-bars"]').getAttribute('data-quality').catch(() => 0)), {
+        what: 'quality bars on A',
+        timeout: 10000,
+      });
+      if (q < 3) throw new Error(`quality ${q} on a local connection`);
+      return `${q}/4 bars`;
+    });
+
+    await step('Whiteboard: A draws, B gets notified and sees the ink; clear wipes it for both', async () => {
+      await openTools(A.page);
+      await A.page.locator('[data-testid="tool-whiteboard"]').click();
+      await A.page.locator('[data-testid="wb-canvas"]').waitFor();
+      await drawLine(A.page, [0.2, 0.3], [0.7, 0.6]);
+      await B.page.locator('[data-testid="activity-card"]').filter({ hasText: 'whiteboard' }).click({ timeout: 10000 });
+      await B.page.locator('[data-testid="wb-canvas"]').waitFor();
+      const ink = await until(async () => {
+        const n = await inkPixels(B.page);
+        return n > 30 ? n : false;
+      }, { what: 'ink on B' });
+      await A.page.locator('[data-testid="wb-clear"]').click();
+      await until(async () => (await inkPixels(B.page)) === 0, { what: 'board cleared on B' });
+      await drawLine(A.page, [0.3, 0.7], [0.8, 0.2]);
+      await until(async () => (await inkPixels(B.page)) > 30, { what: 'second stroke on B' });
+      await B.page.locator('[data-testid="wb-close"]').click();
+      await A.page.locator('[data-testid="wb-close"]').click();
+      return `${ink} ink samples on B`;
+    });
+
+    await step('Polls: A launches a poll, B votes from the notification, A sees the result', async () => {
+      await openTools(A.page);
+      await A.page.locator('[data-testid="tool-polls"]').click();
+      await A.page.locator('[data-testid="poll-question"]').fill('Pizza or tacos?');
+      await A.page.locator('[data-testid="poll-option-0"]').fill('Pizza');
+      await A.page.locator('[data-testid="poll-option-1"]').fill('Tacos');
+      await A.page.locator('[data-testid="poll-launch"]').click();
+      await B.page.locator('[data-testid="activity-card"]').filter({ hasText: 'Pizza or tacos?' }).click({ timeout: 10000 });
+      await B.page.locator('[data-testid="polls-panel"] [data-testid="poll-vote-1"]').click();
+      await until(async () => (await A.page.locator('[data-testid="poll-count-1"]').innerText()).startsWith('1 ·'), { what: 'vote counted on A' });
+      const txt = await A.page.locator('[data-testid="poll-count-1"]').innerText();
+      await closeSide(A.page);
+      await closeSide(B.page);
+      return `Tacos: ${txt}`;
+    });
+
+    await step('Shared timer: A starts 1 minute, B sees the countdown, stop clears it', async () => {
+      await openTools(A.page);
+      await A.page.locator('[data-testid="timer-1"]').click();
+      const t = await until(async () => {
+        const x = await B.page.locator('[data-testid="timer-chip"]').innerText().catch(() => '');
+        return /0:5\d|1:00/.test(x) ? x.trim() : false;
+      }, { what: 'timer on B' });
+      await A.page.locator('[data-testid="timer-stop"]').click();
+      await until(async () => (await B.page.locator('[data-testid="timer-chip"]').count()) === 0, { what: 'timer stopped on B' });
+      return `B showed ${t}`;
+    });
+
+    await step('Live captions: B turns on captions, A is asked to transcribe, captions show on B', async () => {
+      const supported = await B.page.locator('[data-testid="ctrl-cc"]').count();
+      if (!supported) return 'SKIPPED: speech recognition API not present in this browser';
+      await B.page.locator('[data-testid="ctrl-cc"]').click();
+      await until(() => A.page.evaluate(() => window.__yapameet.anyoneWantsCaptions()), { what: 'A knows captions are wanted' });
+      // Headless browsers can't reach the speech service, so inject a caption as A's recognizer would.
+      await A.page.evaluate(() => window.__yapameet.sendApp('cc', { id: 't1', text: 'hello from the captions test', final: true }));
+      await until(async () => (await B.page.locator('[data-testid="captions-overlay"]').innerText().catch(() => '')).includes('Alice: hello from the captions test'), {
+        what: 'caption on B',
+      });
+      await B.page.locator('[data-testid="ctrl-cc"]').click();
+      await until(() => A.page.evaluate(() => !window.__yapameet.anyoneWantsCaptions()), { what: 'captions off everywhere' });
+      return 'caption delivered and shown with speaker name';
+    });
+
+    await step('Recording: B sees REC while A records; stopping saves a video file', async () => {
+      await openTools(A.page);
+      await A.page.locator('[data-testid="tool-record"]').click();
+      await B.page.locator('[data-testid="rec-chip"]').waitFor({ timeout: 10000 });
+      await until(() => B.page.locator('[data-testid="tile-remote-cam"] .tile-rec').count(), { what: 'REC badge on tile' });
+      await sleep(3000);
+      const [dl] = await Promise.all([A.page.waitForEvent('download', { timeout: 15000 }), A.page.locator('[data-testid="tool-record"]').click()]);
+      const size = await downloadSize(dl);
+      if (size < 20_000) throw new Error(`recording only ${size} bytes`);
+      await until(async () => (await B.page.locator('[data-testid="rec-chip"]').count()) === 0, { what: 'REC cleared on B' });
+      return `${dl.suggestedFilename()} ${Math.round(size / 1024)} KB`;
+    });
+
+    await step('Group photo downloads a PNG of the call', async () => {
+      const [dl] = await Promise.all([A.page.waitForEvent('download', { timeout: 10000 }), A.page.locator('[data-testid="tool-photo"]').click()]);
+      const size = await downloadSize(dl);
+      if (!dl.suggestedFilename().endsWith('.png') || size < 20_000) throw new Error(`${dl.suggestedFilename()} ${size}`);
+      return `${Math.round(size / 1024)} KB`;
+    });
+
+    await step('Voice changer: robot and chipmunk replace the sent mic track, B still hears audio', async () => {
+      const results = [];
+      for (const v of ['robot', 'chipmunk', 'cave']) {
+        await A.page.locator(`[data-testid="voice-${v}"]`).click();
+        await until(
+          () =>
+            A.page.evaluate(() => {
+              const s = window.__yapameet;
+              const sent = [...s.links.values()][0].pc.getTransceivers()[0].sender.track;
+              return sent && sent.id !== s.local.mic.id && sent.id === s.local.micOut.id;
+            }),
+          { what: `${v} track sent` },
+        );
+        await sleep(1200);
+        const e0 = (await inbound(B.page)).audioEnergy;
+        await sleep(1500);
+        const e1 = (await inbound(B.page)).audioEnergy;
+        if (!(e1 - e0 > 0.0005)) throw new Error(`no audio with ${v}`);
+        results.push(`${v} +${(e1 - e0).toFixed(3)}`);
+      }
+      await A.page.locator('[data-testid="voice-none"]').click();
+      await until(
+        () => A.page.evaluate(() => [...window.__yapameet.links.values()][0].pc.getTransceivers()[0].sender.track?.id === window.__yapameet.local.mic.id),
+        { what: 'raw mic restored' },
+      );
+      await closeSide(A.page);
+      return results.join(', ');
+    });
+
+    await step('Auto-framing runs the segmenter and keeps video flowing', async () => {
+      await A.page.evaluate(() => window.__yapameetSettings.update({ autoFrame: true }));
+      await until(() => A.page.evaluate(() => !!window.__yapameet.local.pipeline?.segmenterReady), { what: 'segmenter for framing' });
+      await until(() => remoteVideoPlaying(B.page), { what: 'frames with auto-framing' });
+      await A.page.evaluate(() => window.__yapameetSettings.update({ autoFrame: false }));
+      await until(() => A.page.evaluate(() => window.__yapameet.local.pipeline === null), { what: 'pipeline off' });
+    });
+
+    await step('"?" opens the keyboard shortcuts sheet', async () => {
+      await A.page.locator('body').click({ position: { x: 5, y: 300 } });
+      await A.page.keyboard.press('Shift+Slash');
+      await A.page.locator('[data-testid="shortcuts"]').waitFor({ timeout: 5000 });
+      await A.page.keyboard.press('Escape');
+    });
+
     await step('Leave: A sees B leave quickly; Rejoin reconnects', async () => {
       const t0 = Date.now();
       await B.page.locator('[data-testid="ctrl-leave"]').click();
@@ -656,6 +826,17 @@ async function main() {
       await until(async () => (await count(A.page)) === 2, { what: 'A count 2 after rejoin', timeout: 30000 });
       await until(() => remoteVideoPlaying(A.page), { what: 'video after rejoin', timeout: 30000 });
       return `leave noticed in ${leftMs} ms, devices released=${camReleased}`;
+    });
+
+    await step('Whiteboard: a rejoining person receives the existing board', async () => {
+      await openTools(B.page);
+      await B.page.locator('[data-testid="tool-whiteboard"]').click();
+      const n = await until(async () => {
+        const x = await inkPixels(B.page);
+        return x > 30 ? x : false;
+      }, { what: 'board snapshot on rejoined B' });
+      await B.page.locator('[data-testid="wb-close"]').click();
+      return `${n} ink samples restored`;
     });
 
     await step('Reload: B refreshes the tab; A replaces the old connection (no duplicate)', async () => {

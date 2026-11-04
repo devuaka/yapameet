@@ -1,5 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Coins, Dices, Ghost, PartyPopper, Pencil, Plane, Plus, Sparkles, Square, Upload, X } from 'lucide-react';
+import {
+  BarChart3,
+  Camera,
+  Captions,
+  Circle,
+  Coins,
+  Dices,
+  FileText,
+  Ghost,
+  PartyPopper,
+  Pencil,
+  PenTool,
+  Plane,
+  Plus,
+  Sparkles,
+  Square,
+  Timer,
+  Upload,
+  X,
+} from 'lucide-react';
+import type { TimerStore } from '../rtc/collab';
+import { formatClock } from '../rtc/collab';
+import type { CaptionsStore } from '../rtc/captions';
+import { captionsSupported } from '../rtc/captions';
+import { VOICES } from '../rtc/voice';
+import { formatElapsed } from '../rtc/recorder';
+import { useNow } from '../lib/hooks';
 import type { LocalMedia } from '../rtc/LocalMedia';
 import type { MeetingSession } from '../rtc/MeetingSession';
 import { useEmitter } from '../lib/hooks';
@@ -23,12 +49,29 @@ export function ToolsPanel({
   local,
   onClose,
   onGhost,
+  features,
 }: {
   session: MeetingSession;
   local: LocalMedia;
   onClose: () => void;
   onGhost: () => void;
+  features: {
+    openWhiteboard: () => void;
+    openPolls: () => void;
+    timer: TimerStore;
+    captions: CaptionsStore;
+    captionsOn: boolean;
+    toggleCaptions: () => void;
+    recording: boolean;
+    recordStart: number;
+    toggleRecording: () => void;
+    groupPhoto: () => void;
+  };
 }) {
+  useEmitter(features.timer);
+  useEmitter(features.captions);
+  const now = useNow(500);
+  const [customMin, setCustomMin] = useState('');
   useEmitter(local);
   const s = useSettings();
   const toast = useToast();
@@ -95,6 +138,108 @@ export function ToolsPanel({
       </div>
 
       <div className="tools-scroll">
+        <section className="tools-section">
+          <h3>Collaborate</h3>
+          <div className="fun-grid">
+            <button className="fun-btn" onClick={features.openWhiteboard} data-testid="tool-whiteboard">
+              <PenTool size={20} />
+              <span>Whiteboard</span>
+            </button>
+            <button className="fun-btn" onClick={features.openPolls} data-testid="tool-polls">
+              <BarChart3 size={20} />
+              <span>Polls</span>
+            </button>
+            <button
+              className={`fun-btn ${features.captionsOn ? 'on' : ''}`}
+              onClick={features.toggleCaptions}
+              disabled={!captionsSupported()}
+              title={captionsSupported() ? '' : 'Live captions need Chrome or Edge'}
+              data-testid="tool-captions"
+            >
+              <Captions size={20} />
+              <span>{features.captionsOn ? 'Captions on' : 'Live captions'}</span>
+            </button>
+            <button className="fun-btn" onClick={() => features.captions.downloadTranscript(session.code)} data-testid="tool-transcript">
+              <FileText size={20} />
+              <span>Transcript ({features.captions.transcript.length})</span>
+            </button>
+          </div>
+          {features.captions.error && <p className="error-text">{features.captions.error}</p>}
+        </section>
+
+        <section className="tools-section">
+          <div className="tools-title">
+            <h3>Timer</h3>
+            {features.timer.running && (
+              <button className="btn btn-small btn-ghost" onClick={() => features.timer.stop()} data-testid="timer-stop">
+                <Square size={12} /> Stop
+              </button>
+            )}
+          </div>
+          {features.timer.running ? (
+            <div className="timer-big" data-testid="timer-big">
+              <Timer size={20} /> {formatClock(features.timer.remaining)}
+              <span className="muted small">started by {features.timer.startedBy}</span>
+            </div>
+          ) : (
+            <div className="timer-presets">
+              {[1, 3, 5, 10, 15].map((m) => (
+                <button key={m} className="btn btn-small btn-ghost" onClick={() => features.timer.start(m * 60_000)} data-testid={`timer-${m}`}>
+                  {m} min
+                </button>
+              ))}
+              <form
+                className="timer-custom"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const m = parseFloat(customMin);
+                  if (m > 0) features.timer.start(Math.round(m * 60_000));
+                  setCustomMin('');
+                }}
+              >
+                <input value={customMin} onChange={(e) => setCustomMin(e.target.value)} placeholder="min" inputMode="decimal" aria-label="Custom minutes" />
+                <button className="btn btn-small" type="submit">
+                  Go
+                </button>
+              </form>
+            </div>
+          )}
+          <p className="muted small">Everyone sees the countdown and hears a chime at zero.</p>
+        </section>
+
+        <section className="tools-section">
+          <h3>Capture</h3>
+          <div className="fun-grid">
+            <button className={`fun-btn ${features.recording ? 'rec' : ''}`} onClick={features.toggleRecording} data-testid="tool-record">
+              {features.recording ? <Square size={20} /> : <Circle size={20} />}
+              <span>{features.recording ? `Stop ${formatElapsed(now - features.recordStart)}` : 'Record call'}</span>
+            </button>
+            <button className="fun-btn" onClick={features.groupPhoto} data-testid="tool-photo">
+              <Camera size={20} />
+              <span>Group photo</span>
+            </button>
+          </div>
+          <p className="muted small">Recordings are saved to your computer as a video file. Everyone is shown that you're recording.</p>
+        </section>
+
+        <section className="tools-section">
+          <h3>Voice changer</h3>
+          <div className="voice-grid" data-testid="voice-grid">
+            {VOICES.map((v) => (
+              <button
+                key={v.id}
+                className={`voice-opt ${s.voiceFx === v.id ? 'sel' : ''}`}
+                onClick={() => updateSettings({ voiceFx: v.id })}
+                data-testid={`voice-${v.id}`}
+              >
+                <span>{v.emoji}</span>
+                {v.label}
+              </button>
+            ))}
+          </div>
+          <p className="muted small">Everyone hears the changed voice.</p>
+        </section>
+
         <section className="tools-section">
           <div className="tools-title">
             <h3>Soundboard</h3>

@@ -19,6 +19,8 @@ export interface LinkStats {
   /** Rough glass-to-glass estimate: half the round trip + receive buffer. */
   delayMs: number | null;
   codec: string;
+  /** Packet loss over the last stats interval, percent. */
+  loss: number;
 }
 
 export interface Participant {
@@ -29,6 +31,10 @@ export interface Participant {
   video: boolean;
   screen: boolean;
   hand: boolean;
+  recording: boolean;
+  captions: boolean;
+  /** 1 (bad) to 4 (great), null = unknown. */
+  quality: number | null;
   conn: ConnState;
   relay: boolean | null;
   rtt: number | null;
@@ -67,7 +73,11 @@ export type SessionEvent =
   | { type: 'react'; from: string; name: string; emoji: string; isLocal: boolean }
   | { type: 'fx'; from: string; name: string; fx: FxKind; isLocal: boolean }
   | { type: 'hand'; from: string; name: string; up: boolean; isLocal: boolean }
-  | { type: 'typing'; from: string; name: string };
+  | { type: 'typing'; from: string; name: string }
+  | { type: 'app'; from: string; name: string; kind: string; data: unknown; isLocal: boolean }
+  | { type: 'peer-ready'; from: string }
+  | { type: 'recording'; from: string; name: string; on: boolean }
+  | { type: 'captions'; wanted: boolean };
 
 /**
  * Every peer connection has the same four transceivers in the same order, created
@@ -81,6 +91,17 @@ const SLOTS: TrackSlot[] = ['mic', 'cam', 'screen', 'screenAudio'];
 const KINDS = ['audio', 'video', 'video', 'audio'] as const;
 
 const HEARTBEAT_MS = 8000;
+
+/** 4 bars = great. Based on round-trip time and packet loss. */
+function qualityScore(l: { conn: ConnState; rtt: number | null; stats: LinkStats | null }): number | null {
+  if (l.conn !== 'connected') return l.conn === 'failed' ? 0 : null;
+  if (l.rtt == null) return null;
+  const loss = l.stats?.loss ?? 0;
+  if (l.rtt < 150 && loss < 1.5) return 4;
+  if (l.rtt < 300 && loss < 4) return 3;
+  if (l.rtt < 500 && loss < 10) return 2;
+  return 1;
+}
 const PEER_TIMEOUT_MS = 30000;
 const GHOST_MS = 5200;
 
@@ -100,7 +121,7 @@ class PeerLink {
   relay: boolean | null = null;
   rtt: number | null = null;
   stats: LinkStats | null = null;
-  prevInbound: { bytes: number; ts: number; jbDelay: number; jbCount: number } | null = null;
+  prevInbound: { bytes: number; ts: number; jbDelay: number; jbCount: number; lost: number; recv: number } | null = null;
   media: RemoteStreams = { mic: null, cam: null, screen: null, screenAudio: null };
   lastSeen = Date.now();
   joinedAt = Date.now();
@@ -146,6 +167,9 @@ export class MeetingSession extends Emitter {
   private eventListeners = new Set<(e: SessionEvent) => void>();
   private lastQuality = getSettings().videoQuality + getSettings().lowLatency;
   hand = false;
+  recording = false;
+  /** We want captions shown (everyone transcribes their own mic while anyone wants them). */
+  captionsWanted = false;
   /** Ghost mode easter egg: a JPEG of our empty room, shared with peers. */
   roomPhoto: string | null = null;
 
@@ -260,6 +284,51 @@ export class MeetingSession extends Emitter {
     this.emit();
   }
 
+  setRecording(on: boolean) {
+    if (this.recording === on) return;
+    this.recording = on;
+    void this.broadcastState();
+    this.emit();
+  }
+
+  setCaptionsWanted(on: boolean) {
+    if (this.captionsWanted === on) return;
+    const before = this.anyoneWantsCaptions();
+    this.captionsWanted = on;
+    void this.broadcastState();
+    if (before !== this.anyoneWantsCaptions()) this.fire({ type: 'captions', wanted: this.anyoneWantsCaptions() });
+    this.emit();
+  }
+
+  /** True if anyone in the call (including us) has captions turned on. */
+  anyoneWantsCaptions() {
+    if (this.captionsWanted) return true;
+    for (const l of this.links.values()) if (l.info.captions && !l.leaving) return true;
+    return false;
+  }
+
+  /**
+   * Feature data (whiteboard, polls, timer, captions). Goes peer-to-peer over the
+   * data channel; falls back to encrypted signaling for peers whose channel isn't open.
+   */
+  sendApp(kind: string, data: unknown, to?: string) {
+    if (this.left) return;
+    const payload = JSON.stringify({ t: 'app', kind, data });
+    for (const link of this.links.values()) {
+      if (to && link.id !== to) continue;
+      if (link.leaving) continue;
+      if (link.dc?.readyState === 'open') {
+        try {
+          link.dc.send(payload);
+          continue;
+        } catch {
+          /* fall through to signaling */
+        }
+      }
+      void this.signal.send({ t: 'app', kind, data }, link.id);
+    }
+  }
+
   setHand(up: boolean) {
     if (this.hand === up) return;
     this.hand = up;
@@ -309,6 +378,8 @@ export class MeetingSession extends Emitter {
       video: !!this.local.cam,
       screen: !!this.local.screen,
       hand: this.hand,
+      recording: this.recording,
+      captions: this.captionsWanted,
     };
   }
 
@@ -327,7 +398,7 @@ export class MeetingSession extends Emitter {
   }
 
   private localTrack(i: number): MediaStreamTrack | null {
-    return [this.local.mic, this.local.cam, this.local.screen, this.local.audioOut][i];
+    return [this.local.micOut, this.local.cam, this.local.screen, this.local.audioOut][i];
   }
 
   private onLocalTrack = (slot: TrackSlot, track: MediaStreamTrack | null) => {
@@ -397,11 +468,15 @@ export class MeetingSession extends Emitter {
         if (existing?.leaving) return;
         const isNew = !existing;
         const prevHand = existing?.info.hand ?? false;
+        const prevRec = existing?.info.recording ?? false;
+        const capsBefore = this.anyoneWantsCaptions();
         const link = this.upsertPeer(msg.peer);
         if (!link) return;
         if (!!msg.peer.hand !== prevHand && (!isNew || msg.peer.hand)) {
           this.fire({ type: 'hand', from, name: link.info.name, up: !!msg.peer.hand, isLocal: false });
         }
+        if (!!msg.peer.recording !== prevRec) this.fire({ type: 'recording', from, name: link.info.name, on: !!msg.peer.recording });
+        if (capsBefore !== this.anyoneWantsCaptions()) this.fire({ type: 'captions', wanted: this.anyoneWantsCaptions() });
         if ((msg.t === 'hello' && !msg.reply) || (msg.t === 'state' && isNew)) {
           void this.signal.send({ t: 'hello', peer: this.localInfo(), reply: true }, from);
         }
@@ -465,6 +540,11 @@ export class MeetingSession extends Emitter {
         this.fire({ type: 'react', from, name, emoji: [...msg.emoji].slice(0, 2).join(''), isLocal: false });
         break;
       }
+      case 'app': {
+        const name = this.links.get(from)?.info.name || 'Someone';
+        if (typeof msg.kind === 'string') this.fire({ type: 'app', from, name, kind: msg.kind, data: msg.data, isLocal: false });
+        break;
+      }
       case 'typing': {
         const name = this.links.get(from)?.info.name;
         if (name) this.fire({ type: 'typing', from, name });
@@ -495,6 +575,8 @@ export class MeetingSession extends Emitter {
       video: !!info.video,
       screen: !!info.screen,
       hand: !!info.hand,
+      recording: !!info.recording,
+      captions: !!info.captions,
     };
     const existing = this.links.get(clean.id);
     if (existing) {
@@ -598,11 +680,14 @@ export class MeetingSession extends Emitter {
     link.dc = dc;
     dc.onopen = () => {
       if (this.roomPhoto) this.sendRoomPhoto(link);
+      this.fire({ type: 'peer-ready', from: link.id });
     };
     dc.onmessage = (e) => {
       try {
         const m = JSON.parse(String(e.data));
-        if (m?.t === 'room') {
+        if (m?.t === 'app' && typeof m.kind === 'string') {
+          this.fire({ type: 'app', from: link.id, name: link.info.name, kind: m.kind, data: m.data, isLocal: false });
+        } else if (m?.t === 'room') {
           link.roomPhoto = typeof m.data === 'string' && m.data.startsWith('data:image/') ? m.data : null;
           this.emit();
         }
@@ -848,13 +933,19 @@ export class MeetingSession extends Emitter {
           const prev = link.prevInbound;
           const jbDelay = (r.jitterBufferDelay as number) || 0;
           const jbCount = (r.jitterBufferEmittedCount as number) || 0;
+          const lost = Math.max(0, (r.packetsLost as number) || 0);
+          const recv = (r.packetsReceived as number) || 0;
+          let loss = link.stats?.loss ?? 0;
           let kbps = link.stats?.kbps ?? 0;
           let buffer: number | null = null;
           if (prev && now > prev.ts) {
             kbps = Math.round((((r.bytesReceived as number) - prev.bytes) * 8) / (now - prev.ts));
             if (jbCount > prev.jbCount) buffer = ((jbDelay - prev.jbDelay) / (jbCount - prev.jbCount)) * 1000;
+            const dl = lost - prev.lost;
+            const dr = recv - prev.recv;
+            if (dl + dr > 0) loss = Math.round((dl / (dl + dr)) * 1000) / 10;
           }
-          link.prevInbound = { bytes: r.bytesReceived as number, ts: now, jbDelay, jbCount };
+          link.prevInbound = { bytes: r.bytesReceived as number, ts: now, jbDelay, jbCount, lost, recv };
           const codec = r.codecId ? (stats.get(r.codecId)?.mimeType as string | undefined)?.replace('video/', '') ?? '' : '';
           link.stats = {
             width: (r.frameWidth as number) || 0,
@@ -863,6 +954,7 @@ export class MeetingSession extends Emitter {
             kbps,
             delayMs: buffer != null && link.rtt != null ? Math.round(link.rtt / 2 + buffer + 15) : (link.stats?.delayMs ?? null),
             codec,
+            loss,
           };
         });
         changed = true;
@@ -884,6 +976,9 @@ export class MeetingSession extends Emitter {
       video: !!this.local.cam,
       screen: !!this.local.screen,
       hand: this.hand,
+      recording: this.recording,
+      captions: this.captionsWanted,
+      quality: null,
       conn: 'connected',
       relay: null,
       rtt: null,
@@ -906,6 +1001,9 @@ export class MeetingSession extends Emitter {
         video: l.info.video,
         screen: l.info.screen,
         hand: !!l.info.hand,
+        recording: !!l.info.recording,
+        captions: !!l.info.captions,
+        quality: qualityScore(l),
         conn: l.leaving ? 'connected' : l.conn,
         relay: l.relay,
         rtt: l.rtt,

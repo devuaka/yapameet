@@ -29,6 +29,7 @@ export type FilterId =
   | 'thermal'
   | 'invert'
   | 'pixel';
+export type VoiceFx = 'none' | 'robot' | 'chipmunk' | 'deep' | 'alien' | 'radio' | 'megaphone' | 'cave';
 export type LayoutPref = 'auto' | 'grid' | 'speaker';
 export type EggId = 'ghost' | 'konami' | 'barrelroll' | 'bubblegum' | 'party';
 
@@ -67,6 +68,10 @@ export interface Settings {
   reactionsFloat: boolean;
   soundboardVolume: number;
   autoMiniPlayer: boolean;
+  shareCaptions: boolean;
+  captionsLang: string;
+  voiceFx: VoiceFx;
+  autoFrame: boolean;
   // secrets
   eggs: EggId[];
 }
@@ -105,6 +110,10 @@ export const defaultSettings: Settings = {
   reactionsFloat: true,
   soundboardVolume: 0.8,
   autoMiniPlayer: true,
+  shareCaptions: true,
+  captionsLang: '',
+  voiceFx: 'none',
+  autoFrame: false,
   eggs: [],
 };
 

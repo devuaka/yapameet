@@ -19,7 +19,16 @@ import {
   WifiOff,
   Wand2,
   PictureInPicture2,
+  Captions,
+  CircleDot,
+  Timer as TimerIcon,
 } from 'lucide-react';
+import { WhiteboardStore } from '../rtc/whiteboard';
+import { PollStore, TimerStore, formatClock } from '../rtc/collab';
+import { CaptionsStore, captionsSupported, downloadBlob } from '../rtc/captions';
+import { CallRecorder, snapshotStage } from '../rtc/recorder';
+import { WhiteboardView } from './WhiteboardView';
+import { PollsPanel } from './PollsPanel';
 import type { ChatMessage, MeetingSession, SessionEvent } from '../rtc/MeetingSession';
 import type { LocalMedia } from '../rtc/LocalMedia';
 import { useNow } from '../lib/hooks';
@@ -90,7 +99,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   const toast = useToast();
   const now = useNow(15000);
   const root = useRef<HTMLDivElement>(null);
-  const [panel, setPanel] = useState<'chat' | 'people' | 'tools' | null>(null);
+  const [panel, setPanel] = useState<'chat' | 'people' | 'tools' | 'polls' | null>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [pinned, setPinned] = useState<string | null>(null);
   const [seenOthers, setSeenOthers] = useState(0);
@@ -108,6 +117,121 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   const pttRef = useRef(false);
   pttRef.current = ptt;
   const mini = useMiniPlayer(session, local, onLeave);
+  const stageRef = useRef<HTMLElement>(null);
+  const [stageView, setStageView] = useState<'grid' | 'whiteboard'>('grid');
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [activity, setActivity] = useState<{ id: number; text: string; open: () => void } | null>(null);
+  const [recStart, setRecStart] = useState(0);
+  const [, setTick] = useState(0);
+
+  // Collaboration stores live exactly as long as this call view (created in an effect so
+  // React's dev double-render never makes duplicates that listen to the session).
+  const [stores, setStores] = useState<{ wb: WhiteboardStore; polls: PollStore; timer: TimerStore; captions: CaptionsStore } | null>(null);
+  useEffect(() => {
+    const st = { wb: new WhiteboardStore(session), polls: new PollStore(session), timer: new TimerStore(session), captions: new CaptionsStore(session, local) };
+    setStores(st);
+    const rerender = () => setTick((t) => t + 1);
+    const offs = [st.wb.subscribe(rerender), st.polls.subscribe(rerender), st.timer.subscribe(rerender), st.captions.subscribe(rerender)];
+    return () => {
+      offs.forEach((o) => o());
+      st.wb.dispose();
+      st.polls.dispose();
+      st.timer.dispose();
+      st.captions.dispose();
+    };
+  }, [session, local]);
+
+  const showActivity = useCallback((text: string, open: () => void) => {
+    const id = Date.now();
+    setActivity({ id, text, open });
+    window.setTimeout(() => setActivity((a) => (a?.id === id ? null : a)), 6000);
+  }, []);
+
+  useEffect(() => {
+    if (!stores) return;
+    stores.polls.onNewPoll = (p) => {
+      sounds.message();
+      showActivity(`📊 ${p.byName} started a poll: ${p.question}`, () => setPanel('polls'));
+    };
+    stores.timer.onDone = () => {
+      sounds.party();
+      toast("⏰ Time's up!", 'success');
+    };
+  }, [stores, showActivity, toast]);
+
+  // Someone else drawing while you're not looking at the board.
+  const lastUnseen = useRef(0);
+  useEffect(() => {
+    if (!stores) return;
+    const u = stores.wb.unseen;
+    if (u > 0 && lastUnseen.current === 0 && stageView !== 'whiteboard') {
+      showActivity(`✏️ ${stores.wb.lastDrawer || 'Someone'} is drawing on the whiteboard`, () => setStageView('whiteboard'));
+    }
+    lastUnseen.current = u;
+  });
+
+  // Recording (local file) with a REC indicator for everyone.
+  const recorder = useRef<CallRecorder | null>(null);
+  if (!recorder.current) {
+    recorder.current = new CallRecorder(
+      () => stageRef.current,
+      () => {
+        const snapNow = session.getSnapshot();
+        const streams: MediaStream[] = [];
+        for (const p of snapNow.participants.slice(1)) {
+          if (p.micStream) streams.push(p.micStream);
+          if (p.screenAudioStream) streams.push(p.screenAudioStream);
+        }
+        if (local.micOut) streams.push(new MediaStream([local.micOut]));
+        if (local.audioOut) streams.push(new MediaStream([local.audioOut]));
+        return streams;
+      },
+    );
+  }
+  const finishRecording = useCallback(async () => {
+    const blob = await recorder.current?.stop();
+    session.setRecording(false);
+    setRecStart(0);
+    if (blob && blob.size) {
+      downloadBlob(blob, `yapameet-${session.code}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.webm`);
+      toast(`Recording saved (${(blob.size / 1048576).toFixed(1)} MB)`, 'success');
+    }
+  }, [session, toast]);
+  const toggleRecording = useCallback(() => {
+    if (recorder.current?.recording) {
+      void finishRecording();
+      return;
+    }
+    if (recorder.current?.start()) {
+      session.setRecording(true);
+      setRecStart(Date.now());
+      toast('🔴 Recording started. Everyone can see this.', 'success');
+    } else toast('Recording is not supported in this browser', 'error');
+  }, [finishRecording, session, toast]);
+  useEffect(
+    () => () => {
+      if (recorder.current?.recording) void finishRecording();
+    },
+    [finishRecording],
+  );
+
+  const groupPhoto = useCallback(async () => {
+    const st = stageRef.current;
+    if (!st) return;
+    sounds.shutter();
+    document.documentElement.classList.add('fx-flash');
+    window.setTimeout(() => document.documentElement.classList.remove('fx-flash'), 450);
+    const blob = await snapshotStage(st);
+    if (blob) downloadBlob(blob, `yapameet-${session.code}-group-photo.png`);
+  }, [session.code]);
+
+  const toggleCaptions = useCallback(() => {
+    if (!captionsSupported()) {
+      toast('Live captions need Chrome or Edge', 'error');
+      return;
+    }
+    session.setCaptionsWanted(!session.captionsWanted);
+  }, [session, toast]);
 
   const me = snap.participants[0];
   const remotes = snap.participants.slice(1);
@@ -211,6 +335,10 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   useEffect(
     () =>
       session.onEvent((e: SessionEvent) => {
+        if (e.type === 'recording') {
+          toast(e.on ? `🔴 ${e.name} started recording this call` : `${e.name} stopped recording`);
+          return;
+        }
         if (e.type === 'typing') {
           setTypers((t) => ({ ...t, [e.from]: { name: e.name, until: Date.now() + 4000 } }));
           return;
@@ -331,6 +459,11 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
           e.preventDefault();
           void toggleCam();
         }
+        return;
+      }
+      if (e.key === '?' && !isTyping(document.activeElement)) {
+        e.preventDefault();
+        setShowShortcuts((v) => !v);
         return;
       }
       if (e.code === 'Space' && !e.repeat && s.pushToTalk && !isTyping(document.activeElement) && document.activeElement?.tagName !== 'BUTTON') {
@@ -471,6 +604,16 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
           <Copy size={14} />
         </button>
         <div className="call-top-right">
+          {snap.participants.some((p) => p.recording) && (
+            <span className="count-chip rec-chip" title={`Recording: ${snap.participants.filter((p) => p.recording).map((p) => (p.isLocal ? 'you' : p.name)).join(', ')}`} data-testid="rec-chip">
+              <CircleDot size={14} /> REC
+            </span>
+          )}
+          {stores?.timer.running && (
+            <span className="count-chip timer-chip" data-testid="timer-chip">
+              <TimerIcon size={14} /> {formatClock(stores.timer.remaining)}
+            </span>
+          )}
           {hands > 0 && (
             <span className="count-chip hand-chip" title="Raised hands">
               <Hand size={14} /> {hands}
@@ -490,7 +633,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
       </header>
 
       <div className="call-body">
-        <main className="call-stage">
+        <main className="call-stage" ref={stageRef}>
           {signalDown && (
             <div className="banner banner-warn">
               <WifiOff size={16} />
@@ -514,6 +657,9 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
               </button>
             </div>
           )}
+          {stageView === 'whiteboard' && stores ? (
+            <WhiteboardView store={stores.wb} onClose={() => setStageView('grid')} code={session.code} />
+          ) : (
           <VideoGrid
             participants={snap.participants}
             pinned={pinned}
@@ -525,7 +671,29 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             hideSelf={s.hideSelfView}
             compact={s.compactTiles}
           />
+          )}
           <ReactionLayer items={floating} />
+          {me.captions && stores && stores.captions.lines.size > 0 && (
+            <div className="captions-overlay" data-testid="captions-overlay">
+              {[...stores.captions.lines.values()].slice(-3).map((l) => (
+                <div key={l.speaker} className={`caption-line ${l.final ? '' : 'interim'}`}>
+                  <b>{l.speaker === session.selfId ? 'You' : l.name}:</b> {l.text}
+                </div>
+              ))}
+            </div>
+          )}
+          {activity && (
+            <button
+              className="activity-card"
+              onClick={() => {
+                activity.open();
+                setActivity(null);
+              }}
+              data-testid="activity-card"
+            >
+              {activity.text}
+            </button>
+          )}
           {preview && panel !== 'chat' && (
             <button className="chat-preview" onClick={() => setPanel('chat')} data-testid="chat-preview">
               <span className="chat-preview-name">
@@ -548,7 +716,32 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             typers={Object.values(typers).map((t) => t.name)}
             onTyping={() => session.sendTyping()}
           />}
-        {panel === 'tools' && <ToolsPanel session={session} local={local} onClose={() => setPanel(null)} onGhost={() => setGhostOpen(true)} />}
+        {panel === 'tools' && stores && (
+          <ToolsPanel
+            session={session}
+            local={local}
+            onClose={() => setPanel(null)}
+            onGhost={() => setGhostOpen(true)}
+            features={{
+              openWhiteboard: () => {
+                setStageView('whiteboard');
+                setPanel(null);
+              },
+              openPolls: () => setPanel('polls'),
+              timer: stores.timer,
+              captions: stores.captions,
+              captionsOn: me.captions,
+              toggleCaptions,
+              recording: me.recording,
+              recordStart: recStart,
+              toggleRecording,
+              groupPhoto: () => void groupPhoto(),
+            }}
+          />
+        )}
+        {panel === 'polls' && stores && (
+          <PollsPanel store={stores.polls} participants={snap.participants} selfId={session.selfId} onClose={() => setPanel(null)} />
+        )}
         {panel === 'people' && (
           <ParticipantsPanel participants={snap.participants.filter((p) => !p.leaving)} onClose={() => setPanel(null)} onCopyLink={() => void copyLink()} />
         )}
@@ -608,6 +801,15 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             onClick={toggleHand}
             testId="ctrl-hand"
           />
+          {captionsSupported() && (
+            <CtrlButton
+              icon={<Captions size={22} />}
+              label={me.captions ? 'Turn off captions' : 'Turn on live captions'}
+              active={me.captions}
+              onClick={toggleCaptions}
+              testId="ctrl-cc"
+            />
+          )}
           <CtrlButton icon={<SettingsIcon size={22} />} label="Settings" onClick={() => setSettingsTab('audio')} testId="ctrl-settings" className="hide-xs" />
           {miniPlayerSupported() && (
             <CtrlButton
@@ -716,6 +918,20 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
         </Modal>
       )}
 
+      {showShortcuts && (
+        <Modal title="Keyboard shortcuts" onClose={() => setShowShortcuts(false)}>
+          <ul className="shortcuts" data-testid="shortcuts">
+            <li><kbd>Ctrl</kbd>+<kbd>D</kbd> Mute / unmute</li>
+            <li><kbd>Ctrl</kbd>+<kbd>E</kbd> Camera on / off</li>
+            <li><kbd>Space</kbd> (hold, while muted) Push to talk</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> Raise / lower hand</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd> Open chat</li>
+            <li><kbd>1</kbd>-<kbd>9</kbd> Soundboard pads (Tools open)</li>
+            <li><kbd>?</kbd> This list</li>
+            <li><kbd>Esc</kbd> Close dialogs</li>
+          </ul>
+        </Modal>
+      )}
       {ghostOpen && <GhostDialog local={local} session={session} onClose={() => setGhostOpen(false)} />}
     </div>
   );

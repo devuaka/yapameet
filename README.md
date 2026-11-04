@@ -18,6 +18,12 @@ Free, browser-based video meetings. Create a link, send it, talk. No accounts, n
 - **Reactions**, **raise hand**, **push to talk** (hold Space while muted), "you're muted" warning
 - **Soundboard**: 8 built-in synthesized sounds + upload your own MP3/WAV/OGG/M4A (stored on your device). Everyone hears them, even while you're muted
 - **Mini player**: switch tabs during a call and Chrome/Edge pop out a floating window with the call and your controls (Document Picture-in-Picture + Media Session auto-PiP, like Meet); there's also a manual button
+- **Collaborative whiteboard** (pen, highlighter, eraser, colors, undo, clear, save as PNG); people who join late get the current board
+- **Polls** with live results (named or anonymous) and a **shared countdown timer**
+- **Live captions** with speaker names and a downloadable transcript (each person's own browser transcribes their own mic; Chrome/Edge)
+- **Record the call** to a local .webm (everyone sees a REC indicator) and **group photo** to PNG
+- **Voice changer**: robot, chipmunk, deep, alien, radio, megaphone, cave
+- **Auto-framing** that zooms in and follows you; **signal-strength bars** on every tile; `?` shows all shortcuts
 - **Tools panel** with every fun effect: confetti, party mode, barrel roll, Ghost Protocol, dice, coin
 - **Chat** with emoji picker, typing indicators, new-message previews and slash commands (`/help`)
 - **Easter eggs** (Settings > Secrets tracks what you've found). The headline one, Ghost Protocol: photograph your empty room and when you leave, everyone watches you fade out of it

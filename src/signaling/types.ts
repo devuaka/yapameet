@@ -20,6 +20,8 @@ export interface PeerInfo {
   video: boolean;
   screen: boolean;
   hand?: boolean;
+  recording?: boolean;
+  captions?: boolean;
 }
 
 export type FxKind = 'confetti' | 'party' | 'barrelroll';
@@ -36,7 +38,8 @@ export type SignalMessage =
   | { t: 'chat'; id: string; name: string; text: string; ts: number }
   | { t: 'react'; id: string; emoji: string }
   | { t: 'fx'; id: string; fx: FxKind }
-  | { t: 'typing' };
+  | { t: 'typing' }
+  | { t: 'app'; kind: string; data: unknown };
 
 export interface Envelope {
   v: 1;

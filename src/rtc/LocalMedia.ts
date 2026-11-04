@@ -2,6 +2,7 @@ import { Emitter } from '../lib/emitter';
 import { QUALITY, getSettings, subscribeSettings, updateSettings } from '../lib/settings';
 import { EffectsPipeline, effectsNeeded, segmenterError, type EffectOptions } from './effects';
 import { getAudioContext } from '../lib/sounds';
+import { buildVoiceChain, type VoiceChain } from './voice';
 
 export type MediaErrorKind = 'denied' | 'notfound' | 'inuse' | 'unsupported' | 'unknown';
 export interface MediaErrorInfo {
@@ -41,7 +42,7 @@ function describeError(err: unknown, what: 'microphone' | 'camera' | 'screen'): 
 
 const effectOptions = (): EffectOptions => {
   const s = getSettings();
-  return { bg: s.bgEffect, bgImage: s.bgImage, filter: s.filter, lowLight: s.lowLightBoost };
+  return { bg: s.bgEffect, bgImage: s.bgImage, filter: s.filter, lowLight: s.lowLightBoost, autoFrame: s.autoFrame };
 };
 
 /**
@@ -51,6 +52,11 @@ const effectOptions = (): EffectOptions => {
  */
 export class LocalMedia extends Emitter {
   mic: MediaStreamTrack | null = null;
+  /** What is sent for the mic: the raw mic, or the voice-changer output. */
+  micOut: MediaStreamTrack | null = null;
+  private voiceChain: VoiceChain | null = null;
+  private voiceFor = '';
+  private voiceSeq = 0;
   /** The camera track that is shown and sent (effects output, or the raw camera). */
   cam: MediaStreamTrack | null = null;
   /** The camera exactly as captured. */
@@ -136,6 +142,7 @@ export class LocalMedia extends Emitter {
       this.lastEffects = fx;
       this.rebuildCamOutput();
     }
+    void this.rebuildMicOutput();
     const q = getSettings().videoQuality;
     if (q !== this.lastQuality) {
       this.lastQuality = q;
@@ -272,7 +279,7 @@ export class LocalMedia extends Emitter {
     this.micStream = track ? new MediaStream([track]) : null;
     this.micMonitorStream = track ? new MediaStream([track.clone()]) : null;
     if (this.micMonitorStream) this.micMonitorStream.getTracks()[0].enabled = true;
-    this.onTrack?.('mic', track);
+    void this.rebuildMicOutput();
     if (old && old !== track) old.stop();
     oldMonitor?.getTracks().forEach((t) => t.stop());
     this.emit();
@@ -292,6 +299,38 @@ export class LocalMedia extends Emitter {
     }
     this.rebuildCamOutput();
     if (old && old !== track) old.stop();
+  }
+
+  /** Decide what to send for the mic: raw, or through the voice changer. */
+  private async rebuildMicOutput() {
+    const mic = this.mic;
+    const fx = getSettings().voiceFx;
+    const key = `${mic?.id ?? ''}|${fx}`;
+    if (key === this.voiceFor) return;
+    this.voiceFor = key;
+    const seq = ++this.voiceSeq;
+    let next: MediaStreamTrack | null = mic;
+    let chain: VoiceChain | null = null;
+    if (mic && fx !== 'none') {
+      try {
+        chain = await buildVoiceChain(getAudioContext(), mic, fx);
+      } catch (err) {
+        console.warn('[yapameet] voice effect failed', err);
+      }
+      if (seq !== this.voiceSeq) {
+        chain?.stop();
+        return;
+      }
+      if (chain) next = chain.output;
+    }
+    const old = this.voiceChain;
+    this.voiceChain = chain;
+    if (next !== this.micOut) {
+      this.micOut = next;
+      this.onTrack?.('mic', next);
+    }
+    old?.stop();
+    this.emit();
   }
 
   /** Decide what to send: raw camera, or the effects pipeline wrapped around it. */
@@ -519,6 +558,11 @@ export class LocalMedia extends Emitter {
     this.pipeline?.stop();
     this.pipeline = null;
     this.teardownMixer();
+    this.voiceSeq++;
+    this.voiceChain?.stop();
+    this.voiceChain = null;
+    this.voiceFor = '';
+    this.micOut = null;
     for (const t of [this.mic, this.rawCam, this.cam, this.screen, this.screenAudio]) t?.stop();
     this.micMonitorStream?.getTracks().forEach((t) => t.stop());
     this.mic = this.cam = this.rawCam = this.screen = this.screenAudio = null;
