@@ -19,7 +19,10 @@ export interface PeerInfo {
   audio: boolean;
   video: boolean;
   screen: boolean;
+  hand?: boolean;
 }
+
+export type FxKind = 'confetti' | 'party' | 'barrelroll';
 
 export type SignalMessage =
   | { t: 'hello'; peer: PeerInfo; reply?: boolean }
@@ -30,7 +33,10 @@ export type SignalMessage =
   | { t: 'answer'; pcId: string; sdp: string }
   | { t: 'ice'; pcId: string; candidates: RTCIceCandidateInit[] }
   | { t: 'restart'; pcId: string }
-  | { t: 'chat'; id: string; name: string; text: string; ts: number };
+  | { t: 'chat'; id: string; name: string; text: string; ts: number }
+  | { t: 'react'; id: string; emoji: string }
+  | { t: 'fx'; id: string; fx: FxKind }
+  | { t: 'typing' };
 
 export interface Envelope {
   v: 1;

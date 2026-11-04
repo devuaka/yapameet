@@ -1,13 +1,37 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Keyboard, Lock, MessageSquare, MonitorUp, Plus, Users, Video, Zap } from 'lucide-react';
 import { SiteHeader } from '../components/Brand';
 import { parseMeetingInput } from '../lib/meetingCode';
+import { findEgg, updateSettings } from '../lib/settings';
+import { sounds } from '../lib/sounds';
+import { useToast } from '../components/Toast';
 
 export function Landing() {
   const nav = useNavigate();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  const [spin, setSpin] = useState(false);
+  const toast = useToast();
+  const clicks = useRef<number[]>([]);
+
+  // Easter egg: the logo is ticklish (5 quick clicks).
+  const onLogo = () => {
+    const t = Date.now();
+    clicks.current = [...clicks.current.filter((x) => t - x < 2500), t];
+    sounds.pop();
+    if (clicks.current.length >= 5) {
+      clicks.current = [];
+      setSpin(false);
+      requestAnimationFrame(() => setSpin(true));
+      window.setTimeout(() => setSpin(false), 1200);
+      if (findEgg('bubblegum')) {
+        sounds.secret();
+        toast('🍬 Secret found: Ticklish. Bubblegum theme unlocked!', 'success');
+        updateSettings({ theme: 'bubblegum' });
+      } else toast('Hehe, that tickles 🤭');
+    }
+  };
 
   const join = (e: FormEvent) => {
     e.preventDefault();
@@ -22,7 +46,7 @@ export function Landing() {
   return (
     <div className="page landing">
       <div className="bg-glow" aria-hidden="true" />
-      <SiteHeader />
+      <SiteHeader onLogoClick={onLogo} spin={spin} />
       <main className="hero">
         <div className="hero-copy">
           <span className="pill">

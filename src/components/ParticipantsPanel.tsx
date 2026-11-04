@@ -1,4 +1,4 @@
-import { Copy, Mic, MicOff, MonitorUp, Video, VideoOff, X } from 'lucide-react';
+import { Copy, Hand, Mic, MicOff, MonitorUp, Video, VideoOff, X } from 'lucide-react';
 import type { Participant } from '../rtc/MeetingSession';
 import { Avatar } from './controls';
 import { useSpeaking } from './media';
@@ -26,6 +26,7 @@ function Row({ p }: { p: Participant }) {
         {conn && <span className={`person-conn conn-${p.conn}`}>{conn}</span>}
       </div>
       <div className="person-icons">
+        {p.hand && <Hand size={16} className="accent" aria-label="Hand raised" />}
         {p.screen && <MonitorUp size={16} className="accent" aria-label="Presenting" />}
         {p.video ? <Video size={16} /> : <VideoOff size={16} className="muted" />}
         {p.audio ? <Mic size={16} className={speaking ? 'accent' : ''} /> : <MicOff size={16} className="danger" />}
@@ -55,7 +56,7 @@ export function ParticipantsPanel({
         <Copy size={16} /> Copy invite link
       </button>
       <ul className="people-list">
-        {participants.map((p) => (
+        {[...participants].sort((a, b) => Number(b.hand) - Number(a.hand)).map((p) => (
           <Row key={p.id} p={p} />
         ))}
       </ul>

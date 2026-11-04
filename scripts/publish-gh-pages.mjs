@@ -71,7 +71,7 @@ const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
 if (process.env.SKIP_SOURCE !== '1') {
   // .github is skipped: pushing workflow files needs a token with the `workflow` scope.
   const skipNames = new Set(['node_modules', 'dist', '.github', '.claude', '.wrangler', '.env', '.env.local']);
-  const src = walk('.', (n) => skipNames.has(n) || n.endsWith('.log') || n.endsWith('.tsbuildinfo'));
+  const src = walk('.', (n, full) => skipNames.has(n) || full.endsWith(join('public', 'mediapipe')) || n.endsWith('.log') || n.endsWith('.tsbuildinfo'));
   pushTree('main', '.', src, [], `Yapameet source (${stamp})`);
 }
 

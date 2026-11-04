@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Copy, Mic, MicOff, Settings as SettingsIcon, Video, VideoOff } from 'lucide-react';
+import { Copy, Mic, MicOff, Settings as SettingsIcon, Sparkles, Video, VideoOff } from 'lucide-react';
 import { BrandLink } from './Brand';
 import { Avatar, DeviceSelect, Modal } from './controls';
-import { DevicePanel } from './DevicePanel';
+import { AudioPanel, EffectsPanel, VideoPanel } from './SettingsPanels';
 import { LevelMeter, VideoView } from './media';
 import { copyText, useToast } from './Toast';
 import type { LocalMedia } from '../rtc/LocalMedia';
@@ -29,14 +29,14 @@ export function PreJoin({
   const s = useSettings();
   const toast = useToast();
   const [name, setName] = useState(defaultName);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState<null | 'audio' | 'video' | 'effects'>(null);
   const mics = local.devices.filter((d) => d.kind === 'audioinput');
   const cams = local.devices.filter((d) => d.kind === 'videoinput');
 
   useEffect(() => {
-    audioLevels.watch(PREVIEW_ID, local.micStream);
+    audioLevels.watch(PREVIEW_ID, local.micMonitorStream);
     return () => audioLevels.unwatch(PREVIEW_ID);
-  }, [local.micStream]);
+  }, [local.micMonitorStream]);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -95,7 +95,17 @@ export function PreJoin({
               >
                 {local.camOn ? <Video size={22} /> : <VideoOff size={22} />}
               </button>
-              <button type="button" className="round-btn" onClick={() => setShowSettings(true)} aria-label="Device settings" title="Settings">
+              <button
+                type="button"
+                className={`round-btn ${s.bgEffect !== 'none' || s.filter !== 'none' || s.lowLightBoost ? 'fx-on' : ''}`}
+                onClick={() => setShowSettings('effects')}
+                aria-label="Backgrounds and filters"
+                title="Backgrounds & filters"
+                data-testid="prejoin-effects"
+              >
+                <Sparkles size={22} />
+              </button>
+              <button type="button" className="round-btn" onClick={() => setShowSettings('audio')} aria-label="Device settings" title="Settings">
                 <SettingsIcon size={22} />
               </button>
             </div>
@@ -153,8 +163,17 @@ export function PreJoin({
         </form>
       </main>
       {showSettings && (
-        <Modal title="Devices" onClose={() => setShowSettings(false)} wide>
-          <DevicePanel local={local} section="all" />
+        <Modal title="Settings" onClose={() => setShowSettings(null)} wide>
+          <div className="tabs" role="tablist">
+            {(['audio', 'video', 'effects'] as const).map((t) => (
+              <button key={t} role="tab" aria-selected={showSettings === t} className={showSettings === t ? 'active' : ''} onClick={() => setShowSettings(t)}>
+                {t === 'effects' ? 'Backgrounds & filters' : t[0].toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+          {showSettings === 'audio' && <AudioPanel local={local} />}
+          {showSettings === 'video' && <VideoPanel local={local} />}
+          {showSettings === 'effects' && <EffectsPanel local={local} />}
         </Modal>
       )}
     </div>

@@ -12,6 +12,14 @@ Free, browser-based video meetings. Create a link, send it, talk. No accounts, n
 - Pre-join screen with camera preview, mic level meter and device pickers
 - Automatic recovery: ICE restarts, rebuilding broken connections, rejoin after reload without duplicates
 - Responsive on desktop, tablet and phone; keyboard shortcuts Ctrl+D (mic) and Ctrl+E (camera)
+- **Quality presets** up to 1080p60, codec choice (VP8/VP9/H.264/AV1), low-latency mode, live per-tile stats (resolution, fps, bitrate, delay, codec)
+- **Background blur / replacement** (8 built-in scenes + your own uploads) and **12 filters** plus low-light boost. Runs on your device with MediaPipe selfie segmentation; your real background is never sent while effects load
+- **11 themes** (2 secret), reduce-motion, compact tiles, layout modes (auto / grid / active speaker), hide self view
+- **Reactions**, **raise hand**, **push to talk** (hold Space while muted), "you're muted" warning
+- **Soundboard**: 8 built-in synthesized sounds + upload your own MP3/WAV/OGG/M4A (stored on your device). Everyone hears them, even while you're muted
+- **Tools panel** with every fun effect: confetti, party mode, barrel roll, Ghost Protocol, dice, coin
+- **Chat** with emoji picker, typing indicators, new-message previews and slash commands (`/help`)
+- **Easter eggs** (Settings > Secrets tracks what you've found). The headline one, Ghost Protocol: photograph your empty room and when you leave, everyone watches you fade out of it
 
 Pages: Landing (`/`), Create meeting (`/new`), Join (`/join`), Meeting (`/meeting/abc-defg-hij`), Settings (`/settings`).
 
@@ -192,6 +200,8 @@ Being honest about what $0 buys:
 **Supabase free tier.** 200 concurrent Realtime connections per project (that's 200 people in meetings at the same time, across all meetings) and 100 messages/second. Monthly message allowances also apply; a 4-person meeting uses roughly 4,000 to 6,000 messages per hour, mostly heartbeats. Free projects are paused after a period of inactivity; un-pause from the dashboard.
 
 **Security model.** Anyone with the link can join; there are no host controls (kick, mute others, admit from a waiting room) because there is no server to enforce them. Short custom codes like `team-standup` are guessable; use generated codes for private calls. Media is always encrypted peer-to-peer, but with TURN enabled the relay carries (still encrypted) media.
+
+**Background effects.** The segmentation model (about 250 KB) is fetched from Google's public MediaPipe model storage the first time someone turns on blur or a virtual background; the WebAssembly runtime is served by the site itself. Override the model URL with `VITE_SEGMENTER_MODEL_URL` if you want to self-host it. Effects cost CPU/GPU; at 1080p on older laptops use 720p.
 
 **Browsers.** Built and tested for Chrome and Edge. Speaker selection (`setSinkId`) and system-audio screen sharing are Chromium features: Firefox and Safari fall back to default speakers, and Safari cannot share audio with the screen. Mobile browsers can't share the screen.
 

@@ -1,24 +1,47 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Egg, Keyboard, Mic, Palette, RotateCcw, Sparkles, User, Video, Wifi } from 'lucide-react';
 import { SiteHeader } from '../components/Brand';
-import { DevicePanel } from '../components/DevicePanel';
-import { Toggle } from '../components/controls';
+import { AppearancePanel, AudioPanel, EffectsPanel, MeetingPanel, SecretsPanel, VideoPanel } from '../components/SettingsPanels';
+import { useToast } from '../components/Toast';
 import { LocalMedia } from '../rtc/LocalMedia';
-import { updateSettings, useSettings } from '../lib/settings';
+import { resetSettings, updateSettings, useSettings } from '../lib/settings';
 import { config, hasTurn } from '../config';
+import { EGGS } from '../lib/themes';
+
+type Section = 'profile' | 'appearance' | 'audio' | 'video' | 'effects' | 'meeting' | 'network' | 'secrets';
+
+const SECTIONS: { id: Section; label: string; icon: React.ReactNode }[] = [
+  { id: 'profile', label: 'Profile', icon: <User size={18} /> },
+  { id: 'appearance', label: 'Appearance', icon: <Palette size={18} /> },
+  { id: 'audio', label: 'Audio', icon: <Mic size={18} /> },
+  { id: 'video', label: 'Video', icon: <Video size={18} /> },
+  { id: 'effects', label: 'Backgrounds & filters', icon: <Sparkles size={18} /> },
+  { id: 'meeting', label: 'Meetings & shortcuts', icon: <Keyboard size={18} /> },
+  { id: 'network', label: 'Network', icon: <Wifi size={18} /> },
+  { id: 'secrets', label: 'Secrets', icon: <Egg size={18} /> },
+];
 
 export function SettingsPage() {
   const s = useSettings();
+  const toast = useToast();
   const [local] = useState(() => new LocalMedia());
+  const [section, setSection] = useState<Section>(() => (location.hash.slice(1) as Section) || 'profile');
+  const needsDevices = section === 'audio' || section === 'video' || section === 'effects';
 
   useEffect(() => {
-    // Preview devices only while this page is open; never leave the camera running.
+    history.replaceState(null, '', `#${section}`);
+  }, [section]);
+
+  // Only open the camera/mic while a device section is showing.
+  useEffect(() => {
+    if (!needsDevices) return;
     local.camOn = true;
     local.micOn = true;
     void local.start();
-    return () => local.dispose();
-  }, [local]);
+    return () => local.stopAll();
+  }, [local, needsDevices]);
+  useEffect(() => () => local.dispose(), [local]);
 
   return (
     <div className="page">
@@ -31,51 +54,81 @@ export function SettingsPage() {
         <h1>Settings</h1>
         <p className="muted">Saved in this browser. They apply to every meeting you join from here.</p>
 
-        <div className="settings-grid">
-          <div className="card">
-            <section className="panel-section">
-              <h3>Profile</h3>
-              <label className="field">
-                <span>Display name</span>
-                <input
-                  value={s.displayName}
-                  onChange={(e) => updateSettings({ displayName: e.target.value.slice(0, 40) })}
-                  placeholder="Your name"
-                  maxLength={40}
-                  data-testid="settings-name"
-                />
-              </label>
-            </section>
-            <section className="panel-section">
-              <h3>Joining</h3>
-              <Toggle label="Join with microphone muted" checked={s.joinMuted} onChange={(v) => updateSettings({ joinMuted: v })} />
-              <Toggle label="Join with camera off" checked={s.joinCameraOff} onChange={(v) => updateSettings({ joinCameraOff: v })} />
-              <Toggle label="Join, leave and message sounds" checked={s.sounds} onChange={(v) => updateSettings({ sounds: v })} />
-              <Toggle
-                label="Show connection details"
-                hint="Direct vs relayed connection and round-trip time on each tile"
-                checked={s.showConnectionDetails}
-                onChange={(v) => updateSettings({ showConnectionDetails: v })}
-              />
-            </section>
-            <section className="panel-section">
-              <h3>Network</h3>
-              <ul className="infra-list">
-                <li>
-                  <CheckCircle2 size={16} className="ok" /> Signaling: {config.signaling === 'supabase' ? 'Supabase Realtime' : 'Free public MQTT brokers'}
-                </li>
-                <li>
-                  <CheckCircle2 size={16} className="ok" /> STUN: {config.stunUrls.length} public server{config.stunUrls.length === 1 ? '' : 's'}
-                </li>
-                <li>
-                  {hasTurn() ? <CheckCircle2 size={16} className="ok" /> : <AlertTriangle size={16} className="warn" />} TURN relay:{' '}
-                  {hasTurn() ? 'configured' : 'not configured (calls between some strict networks may fail)'}
-                </li>
-              </ul>
-            </section>
-          </div>
-          <div className="card">
-            <DevicePanel local={local} section="all" />
+        <div className="settings-layout">
+          <nav className="settings-nav" aria-label="Settings sections">
+            {SECTIONS.map((x) => (
+              <button key={x.id} className={section === x.id ? 'active' : ''} onClick={() => setSection(x.id)} data-testid={`section-${x.id}`}>
+                {x.icon}
+                <span>{x.label}</span>
+                {x.id === 'secrets' && (
+                  <span className="nav-count">
+                    {s.eggs.length}/{EGGS.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+          <div className="card settings-card">
+            {section === 'profile' && (
+              <div className="device-panel">
+                <section className="panel-section">
+                  <h3>Profile</h3>
+                  <label className="field">
+                    <span>Display name</span>
+                    <input
+                      value={s.displayName}
+                      onChange={(e) => updateSettings({ displayName: e.target.value.slice(0, 40) })}
+                      placeholder="Your name"
+                      maxLength={40}
+                      data-testid="settings-name"
+                    />
+                  </label>
+                </section>
+                <section className="panel-section">
+                  <h3>Reset</h3>
+                  <p className="muted small">Restore every setting to its default. Your name and found secrets are kept.</p>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      resetSettings();
+                      toast('Settings reset', 'success');
+                    }}
+                  >
+                    <RotateCcw size={16} /> Reset all settings
+                  </button>
+                </section>
+              </div>
+            )}
+            {section === 'appearance' && <AppearancePanel />}
+            {section === 'audio' && <AudioPanel local={local} />}
+            {section === 'video' && <VideoPanel local={local} />}
+            {section === 'effects' && <EffectsPanel local={local} />}
+            {section === 'meeting' && <MeetingPanel />}
+            {section === 'secrets' && <SecretsPanel />}
+            {section === 'network' && (
+              <div className="device-panel">
+                <section className="panel-section">
+                  <h3>Network</h3>
+                  <ul className="infra-list">
+                    <li>
+                      <CheckCircle2 size={16} className="ok" /> Signaling:{' '}
+                      {config.signaling === 'supabase' ? 'Supabase Realtime' : 'Free public MQTT brokers'} (end-to-end encrypted)
+                    </li>
+                    <li>
+                      <CheckCircle2 size={16} className="ok" /> STUN: {config.stunUrls.length} public server{config.stunUrls.length === 1 ? '' : 's'}
+                    </li>
+                    <li>
+                      {hasTurn() ? <CheckCircle2 size={16} className="ok" /> : <AlertTriangle size={16} className="warn" />} TURN relay:{' '}
+                      {hasTurn() ? 'configured' : 'not configured (calls between some strict networks may fail)'}
+                    </li>
+                  </ul>
+                  <p className="muted small">
+                    Video goes directly between participants. Tip: turn on "Show connection stats on tiles" (Meetings) to see
+                    resolution, frame rate, bitrate and delay for each person.
+                  </p>
+                </section>
+              </div>
+            )}
           </div>
         </div>
       </main>

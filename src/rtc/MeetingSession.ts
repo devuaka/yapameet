@@ -2,13 +2,24 @@ import { config, getIceServers } from '../config';
 import { audioLevels } from '../lib/audioLevel';
 import { randomId } from '../lib/crypto';
 import { Emitter } from '../lib/emitter';
-import { getClientId } from '../lib/settings';
+import { getClientId, getSettings, subscribeSettings } from '../lib/settings';
 import { sounds } from '../lib/sounds';
 import { SignalingChannel } from '../signaling/SignalingChannel';
-import type { PeerInfo, SignalMessage, TransportStatus } from '../signaling/types';
+import type { FxKind, PeerInfo, SignalMessage, TransportStatus } from '../signaling/types';
 import type { LocalMedia, TrackSlot } from './LocalMedia';
+import { applyCodecPreference, applyLowLatency, senderBudget, tuneRemoteSdp } from './tuning';
 
 export type ConnState = 'connecting' | 'connected' | 'reconnecting' | 'failed';
+
+export interface LinkStats {
+  width: number;
+  height: number;
+  fps: number;
+  kbps: number;
+  /** Rough glass-to-glass estimate: half the round trip + receive buffer. */
+  delayMs: number | null;
+  codec: string;
+}
 
 export interface Participant {
   id: string;
@@ -17,14 +28,19 @@ export interface Participant {
   audio: boolean;
   video: boolean;
   screen: boolean;
+  hand: boolean;
   conn: ConnState;
   relay: boolean | null;
   rtt: number | null;
+  stats: LinkStats | null;
   micStream: MediaStream | null;
   camStream: MediaStream | null;
   screenStream: MediaStream | null;
   screenAudioStream: MediaStream | null;
   joinedAt: number;
+  /** Set while a ghost-mode participant is fading out after leaving. */
+  leaving: boolean;
+  roomPhoto: string | null;
 }
 
 export interface ChatMessage {
@@ -34,6 +50,8 @@ export interface ChatMessage {
   text: string;
   ts: number;
   isLocal: boolean;
+  /** Local-only note (command output etc.), never sent. */
+  system?: boolean;
 }
 
 export interface SessionSnapshot {
@@ -45,18 +63,26 @@ export interface SessionSnapshot {
   messages: ChatMessage[];
 }
 
+export type SessionEvent =
+  | { type: 'react'; from: string; name: string; emoji: string; isLocal: boolean }
+  | { type: 'fx'; from: string; name: string; fx: FxKind; isLocal: boolean }
+  | { type: 'hand'; from: string; name: string; up: boolean; isLocal: boolean }
+  | { type: 'typing'; from: string; name: string };
+
 /**
  * Every peer connection has the same four transceivers in the same order, created
  * only by the "initiator" side (the peer with the smaller id). The other side adopts
  * them from the offer. That fixed layout lets us identify remote tracks by index and
- * swap local tracks with replaceTrack (mute, camera switch, screen share) without
- * ever renegotiating, and since only one side offers there is never offer glare.
+ * swap local tracks with replaceTrack (mute, camera switch, effects, screen share)
+ * without ever renegotiating, and since only one side offers there is never glare.
+ * A negotiated data channel (id 0) rides along for peer-to-peer extras.
  */
 const SLOTS: TrackSlot[] = ['mic', 'cam', 'screen', 'screenAudio'];
 const KINDS = ['audio', 'video', 'video', 'audio'] as const;
 
 const HEARTBEAT_MS = 8000;
 const PEER_TIMEOUT_MS = 30000;
+const GHOST_MS = 5200;
 
 interface RemoteStreams {
   mic: MediaStream | null;
@@ -67,11 +93,14 @@ interface RemoteStreams {
 
 class PeerLink {
   pc: RTCPeerConnection | null = null;
+  dc: RTCDataChannel | null = null;
   pcId = '';
   conn: ConnState = 'connecting';
   everConnected = false;
   relay: boolean | null = null;
   rtt: number | null = null;
+  stats: LinkStats | null = null;
+  prevInbound: { bytes: number; ts: number; jbDelay: number; jbCount: number } | null = null;
   media: RemoteStreams = { mic: null, cam: null, screen: null, screenAudio: null };
   lastSeen = Date.now();
   joinedAt = Date.now();
@@ -82,7 +111,8 @@ class PeerLink {
   restartTimer: number | null = null;
   attempts = 0;
   lastRestartRequest = 0;
-  /** Serializes async SDP work so offers/answers/candidates never interleave. */
+  roomPhoto: string | null = null;
+  leaving = false;
   queue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -102,7 +132,7 @@ export class MeetingSession extends Emitter {
   readonly clientId = getClientId();
   private links = new Map<string, PeerLink>();
   private messages: ChatMessage[] = [];
-  private seenChat = new Set<string>();
+  private seen = new Set<string>();
   private signal: SignalingChannel;
   private iceServers: RTCIceServer[] = [];
   private timers: number[] = [];
@@ -111,7 +141,13 @@ export class MeetingSession extends Emitter {
   private signalUp = false;
   private lastInfoJson = '';
   private unsubLocal: (() => void) | null = null;
+  private unsubSettings: (() => void) | null = null;
   private snapshot: SessionSnapshot;
+  private eventListeners = new Set<(e: SessionEvent) => void>();
+  private lastQuality = getSettings().videoQuality + getSettings().lowLatency;
+  hand = false;
+  /** Ghost mode easter egg: a JPEG of our empty room, shared with peers. */
+  roomPhoto: string | null = null;
 
   constructor(
     readonly code: string,
@@ -130,12 +166,25 @@ export class MeetingSession extends Emitter {
     super.emit();
   }
 
+  onEvent(fn: (e: SessionEvent) => void) {
+    this.eventListeners.add(fn);
+    return () => {
+      this.eventListeners.delete(fn);
+    };
+  }
+
+  private fire(e: SessionEvent) {
+    for (const fn of this.eventListeners) fn(e);
+  }
+
   // ---------------------------------------------------------------- lifecycle
 
   async join() {
     this.joinedAt = Date.now();
     this.local.onTrack = this.onLocalTrack;
+    this.local.ensureMixer();
     this.unsubLocal = this.local.subscribe(this.onLocalChange);
+    this.unsubSettings = subscribeSettings(this.onSettingsChange);
     (window as unknown as { __yapameet?: MeetingSession }).__yapameet = this;
 
     this.signal.onMessage = this.onSignal;
@@ -147,7 +196,7 @@ export class MeetingSession extends Emitter {
     this.timers.push(
       window.setInterval(() => void this.broadcastState(true), HEARTBEAT_MS),
       window.setInterval(this.sweep, 4000),
-      window.setInterval(() => void this.collectStats(), 4000),
+      window.setInterval(() => void this.collectStats(), 2000),
     );
     window.addEventListener('online', this.onOnline);
     window.addEventListener('pagehide', this.onPageHide);
@@ -161,7 +210,6 @@ export class MeetingSession extends Emitter {
     this.emit();
   }
 
-  /** Leave the meeting: say goodbye, close every connection, release timers. */
   async leave() {
     if (this.left) return;
     this.left = true;
@@ -177,7 +225,8 @@ export class MeetingSession extends Emitter {
     for (const link of [...this.links.values()]) this.dropLink(link, false);
     this.signal.close();
     this.unsubLocal?.();
-    this.unsubLocal = null;
+    this.unsubSettings?.();
+    this.unsubLocal = this.unsubSettings = null;
     if (this.local.onTrack === this.onLocalTrack) this.local.onTrack = null;
     const w = window as unknown as { __yapameet?: MeetingSession };
     if (w.__yapameet === this) delete w.__yapameet;
@@ -192,12 +241,63 @@ export class MeetingSession extends Emitter {
     for (const link of this.links.values()) if (link.conn !== 'connected') this.restart(link);
   };
 
+  private onSettingsChange = () => {
+    const s = getSettings();
+    const key = s.videoQuality + s.lowLatency;
+    if (key === this.lastQuality) return;
+    this.lastQuality = key;
+    for (const link of this.links.values()) {
+      this.applyBitrates(link);
+      link.pc?.getReceivers().forEach((r) => applyLowLatency(r, s.lowLatency));
+    }
+  };
+
   // ---------------------------------------------------------------- local side
 
   setName(name: string) {
     this.name = name.trim().slice(0, 40) || this.name;
     void this.broadcastState();
     this.emit();
+  }
+
+  setHand(up: boolean) {
+    if (this.hand === up) return;
+    this.hand = up;
+    this.fire({ type: 'hand', from: this.selfId, name: this.name, up, isLocal: true });
+    void this.broadcastState();
+    this.emit();
+  }
+
+  react(emoji: string) {
+    if (this.left) return;
+    const id = randomId(6);
+    this.seen.add(id);
+    this.fire({ type: 'react', from: this.selfId, name: this.name, emoji, isLocal: true });
+    void this.signal.send({ t: 'react', id, emoji });
+  }
+
+  sendFx(fx: FxKind) {
+    if (this.left) return;
+    const id = randomId(6);
+    this.seen.add(id);
+    this.fire({ type: 'fx', from: this.selfId, name: this.name, fx, isLocal: true });
+    void this.signal.send({ t: 'fx', id, fx });
+  }
+
+  /** Ghost mode: share a photo of our empty room so we can fade into it when leaving. */
+  setRoomPhoto(dataUrl: string | null) {
+    this.roomPhoto = dataUrl;
+    for (const link of this.links.values()) this.sendRoomPhoto(link);
+  }
+
+  private sendRoomPhoto(link: PeerLink) {
+    const dc = link.dc;
+    if (!dc || dc.readyState !== 'open') return;
+    try {
+      dc.send(JSON.stringify({ t: 'room', data: this.roomPhoto }));
+    } catch (err) {
+      console.warn('[yapameet] room photo send failed', err);
+    }
   }
 
   private localInfo(): PeerInfo {
@@ -208,6 +308,7 @@ export class MeetingSession extends Emitter {
       audio: this.local.micOn && !!this.local.mic,
       video: !!this.local.cam,
       screen: !!this.local.screen,
+      hand: this.hand,
     };
   }
 
@@ -226,7 +327,7 @@ export class MeetingSession extends Emitter {
   }
 
   private localTrack(i: number): MediaStreamTrack | null {
-    return [this.local.mic, this.local.cam, this.local.screen, this.local.screenAudio][i];
+    return [this.local.mic, this.local.cam, this.local.screen, this.local.audioOut][i];
   }
 
   private onLocalTrack = (slot: TrackSlot, track: MediaStreamTrack | null) => {
@@ -234,19 +335,37 @@ export class MeetingSession extends Emitter {
     for (const link of this.links.values()) {
       const tr = link.pc?.getTransceivers()[idx];
       if (tr && link.pc?.signalingState !== 'closed') {
-        tr.sender.replaceTrack(track).catch((err) => console.warn('[yapameet] replaceTrack', err));
+        tr.sender
+          .replaceTrack(track)
+          .then(() => this.applyBitrates(link))
+          .catch((err) => console.warn('[yapameet] replaceTrack', err));
       }
     }
-    if (slot === 'screen') for (const link of this.links.values()) this.applyBitrates(link);
   };
 
   sendChat(text: string) {
     const clean = text.trim().slice(0, 2000);
     if (!clean || this.left) return;
     const msg: ChatMessage = { id: randomId(8), from: this.selfId, name: this.name, text: clean, ts: Date.now(), isLocal: true };
-    this.seenChat.add(msg.id);
+    this.seen.add(msg.id);
+    this.lastTypingSent = 0;
     this.pushMessage(msg);
     void this.signal.send({ t: 'chat', id: msg.id, name: this.name, text: clean, ts: msg.ts });
+  }
+
+  private lastTypingSent = 0;
+
+  /** Tell others we're typing (throttled). */
+  sendTyping() {
+    const now = Date.now();
+    if (this.left || now - this.lastTypingSent < 2500) return;
+    this.lastTypingSent = now;
+    void this.signal.send({ t: 'typing' });
+  }
+
+  /** A message only you see (chat command output). */
+  addNote(text: string) {
+    this.pushMessage({ id: randomId(8), from: 'system', name: 'Yapameet', text, ts: Date.now(), isLocal: true, system: true });
   }
 
   private pushMessage(m: ChatMessage) {
@@ -262,7 +381,6 @@ export class MeetingSession extends Emitter {
     const wasUp = this.signalUp;
     this.signalUp = s === 'connected';
     if (this.signalUp && !wasUp) {
-      // (Re)announce ourselves. Existing peers reply so we learn about them.
       void this.signal.send({ t: 'hello', peer: this.localInfo() });
       for (const link of this.links.values()) if (link.conn !== 'connected') this.restart(link);
     }
@@ -275,9 +393,15 @@ export class MeetingSession extends Emitter {
       case 'hello':
       case 'state': {
         if (!msg.peer || msg.peer.id !== from) return;
-        const isNew = !this.links.has(from);
+        const existing = this.links.get(from);
+        if (existing?.leaving) return;
+        const isNew = !existing;
+        const prevHand = existing?.info.hand ?? false;
         const link = this.upsertPeer(msg.peer);
         if (!link) return;
+        if (!!msg.peer.hand !== prevHand && (!isNew || msg.peer.hand)) {
+          this.fire({ type: 'hand', from, name: link.info.name, up: !!msg.peer.hand, isLocal: false });
+        }
         if ((msg.t === 'hello' && !msg.reply) || (msg.t === 'state' && isNew)) {
           void this.signal.send({ t: 'hello', peer: this.localInfo(), reply: true }, from);
         }
@@ -286,15 +410,15 @@ export class MeetingSession extends Emitter {
       }
       case 'bye': {
         const link = this.links.get(from);
-        if (!link) return;
-        // A broker "last will" can arrive after the peer already reconnected; trust live media over it.
+        if (!link || link.leaving) return;
         if (msg.will && link.conn === 'connected') return;
-        this.dropLink(link, true);
+        if (link.roomPhoto && !getSettings().reduceMotion) this.ghostOut(link);
+        else this.dropLink(link, true);
         break;
       }
       case 'offer': {
         const link = this.links.get(from) ?? this.upsertPeer(this.placeholderInfo(from));
-        if (link) link.run(() => this.handleOffer(link, msg.pcId, msg.sdp));
+        if (link && !link.leaving) link.run(() => this.handleOffer(link, msg.pcId, msg.sdp));
         break;
       }
       case 'answer': {
@@ -309,9 +433,8 @@ export class MeetingSession extends Emitter {
       }
       case 'restart': {
         const link = this.links.get(from);
-        if (!link || !link.initiator) return;
+        if (!link || !link.initiator || link.leaving) return;
         link.lastSeen = Date.now();
-        // The peer only asks when its side is broken, even if ours still looks fine.
         const now = Date.now();
         if (now - link.lastRestartRequest < 2500) return;
         link.lastRestartRequest = now;
@@ -320,8 +443,8 @@ export class MeetingSession extends Emitter {
         break;
       }
       case 'chat': {
-        if (this.seenChat.has(msg.id) || typeof msg.text !== 'string') return;
-        this.seenChat.add(msg.id);
+        if (this.seen.has(msg.id) || typeof msg.text !== 'string') return;
+        this.seen.add(msg.id);
         const link = this.links.get(from);
         if (link) link.lastSeen = Date.now();
         this.pushMessage({
@@ -335,7 +458,28 @@ export class MeetingSession extends Emitter {
         sounds.message();
         break;
       }
+      case 'react': {
+        if (this.seen.has(msg.id) || typeof msg.emoji !== 'string') return;
+        this.seen.add(msg.id);
+        const name = this.links.get(from)?.info.name || 'Someone';
+        this.fire({ type: 'react', from, name, emoji: [...msg.emoji].slice(0, 2).join(''), isLocal: false });
+        break;
+      }
+      case 'typing': {
+        const name = this.links.get(from)?.info.name;
+        if (name) this.fire({ type: 'typing', from, name });
+        break;
+      }
+      case 'fx': {
+        if (this.seen.has(msg.id)) return;
+        this.seen.add(msg.id);
+        if (!['confetti', 'party', 'barrelroll'].includes(msg.fx)) return;
+        const name = this.links.get(from)?.info.name || 'Someone';
+        this.fire({ type: 'fx', from, name, fx: msg.fx, isLocal: false });
+        break;
+      }
     }
+    if (this.seen.size > 5000) this.seen = new Set([...this.seen].slice(-2000));
   };
 
   private placeholderInfo(id: string): PeerInfo {
@@ -350,6 +494,7 @@ export class MeetingSession extends Emitter {
       audio: !!info.audio,
       video: !!info.video,
       screen: !!info.screen,
+      hand: !!info.hand,
     };
     const existing = this.links.get(clean.id);
     if (existing) {
@@ -358,19 +503,27 @@ export class MeetingSession extends Emitter {
       this.emit();
       return existing;
     }
-    // Same browser tab came back with a new id (reload / rejoin): replace, don't duplicate.
     for (const other of [...this.links.values()]) {
       if (other.info.clientId === clean.clientId) this.dropLink(other, false);
     }
     const link = new PeerLink(clean.id, clean, this.selfId < clean.id);
     this.links.set(clean.id, link);
-    // No join chime for people who were already here when we arrived.
     if (Date.now() - this.joinedAt > 2500) sounds.join();
     if (link.initiator) link.run(() => this.startPc(link));
-    else this.armConnectTimer(link, 6000); // ask the initiator to (re)offer if nothing arrives
+    else this.armConnectTimer(link, 6000);
     for (const l of this.links.values()) this.applyBitrates(l);
     this.emit();
     return link;
+  }
+
+  /** Ghost mode: keep the tile around while it fades into the empty-room photo. */
+  private ghostOut(link: PeerLink) {
+    link.leaving = true;
+    if (link.connectTimer) clearTimeout(link.connectTimer);
+    link.connectTimer = null;
+    sounds.ghost();
+    this.emit();
+    window.setTimeout(() => this.dropLink(link, false), GHOST_MS);
   }
 
   private dropLink(link: PeerLink, withSound: boolean) {
@@ -384,15 +537,14 @@ export class MeetingSession extends Emitter {
     this.emit();
   }
 
-  /** Forget peers that stopped heartbeating and have no live media connection. */
   private sweep = () => {
     const now = Date.now();
     for (const link of [...this.links.values()]) {
+      if (link.leaving) continue;
       if (now - link.lastSeen > PEER_TIMEOUT_MS && link.conn !== 'connected') {
         this.dropLink(link, true);
         continue;
       }
-      // A connection that died without events (closed under us): rebuild it.
       if (link.pc && link.pc.signalingState === 'closed') {
         this.closePc(link);
         link.conn = 'reconnecting';
@@ -409,8 +561,13 @@ export class MeetingSession extends Emitter {
     if (link.restartTimer) clearTimeout(link.restartTimer);
     link.outIceTimer = link.restartTimer = null;
     link.outIce = [];
+    link.prevInbound = null;
     const pc = link.pc;
     link.pc = null;
+    if (link.dc) {
+      link.dc.onopen = link.dc.onmessage = null;
+      link.dc = null;
+    }
     if (pc) {
       pc.onicecandidate = pc.ontrack = pc.onconnectionstatechange = null;
       try {
@@ -433,24 +590,43 @@ export class MeetingSession extends Emitter {
     link.pcId = pcId;
     link.relay = null;
     link.rtt = null;
+    link.stats = null;
     link.conn = link.everConnected ? 'reconnecting' : 'connecting';
+
+    // Negotiated on both sides with the same id, so it needs no extra signaling.
+    const dc = pc.createDataChannel('yapa', { negotiated: true, id: 0 });
+    link.dc = dc;
+    dc.onopen = () => {
+      if (this.roomPhoto) this.sendRoomPhoto(link);
+    };
+    dc.onmessage = (e) => {
+      try {
+        const m = JSON.parse(String(e.data));
+        if (m?.t === 'room') {
+          link.roomPhoto = typeof m.data === 'string' && m.data.startsWith('data:image/') ? m.data : null;
+          this.emit();
+        }
+      } catch {
+        /* ignore junk */
+      }
+    };
 
     pc.onicecandidate = (e) => {
       if (pc !== link.pc || !e.candidate) return;
       link.outIce.push(e.candidate.toJSON());
-      // Batch candidates: fewer relay messages (matters for Supabase rate limits).
       if (!link.outIceTimer) {
         link.outIceTimer = window.setTimeout(() => {
           link.outIceTimer = null;
           const batch = link.outIce;
           link.outIce = [];
           if (batch.length && pc === link.pc) void this.signal.send({ t: 'ice', pcId, candidates: batch }, link.id);
-        }, 80);
+        }, 60);
       }
     };
 
     pc.ontrack = (e) => {
       if (pc !== link.pc) return;
+      applyLowLatency(e.receiver, getSettings().lowLatency);
       const idx = pc.getTransceivers().indexOf(e.transceiver);
       const slot = SLOTS[idx];
       if (!slot) return;
@@ -465,11 +641,18 @@ export class MeetingSession extends Emitter {
     return pc;
   }
 
-  /** Initiator: brand-new connection with the fixed transceiver layout. */
+  private setCodecs(pc: RTCPeerConnection) {
+    const pref = getSettings().codec;
+    const trs = pc.getTransceivers();
+    if (trs[1]) applyCodecPreference(trs[1], pref);
+    if (trs[2]) applyCodecPreference(trs[2], pref);
+  }
+
   private async startPc(link: PeerLink) {
-    if (!this.links.has(link.id) || this.left) return;
+    if (!this.links.has(link.id) || this.left || link.leaving) return;
     const pc = this.createPc(link, randomId(6));
     KINDS.forEach((kind, i) => pc.addTransceiver(this.localTrack(i) ?? kind, { direction: 'sendrecv' }));
+    this.setCodecs(pc);
     await this.sendOffer(link, false);
   }
 
@@ -483,12 +666,10 @@ export class MeetingSession extends Emitter {
     await this.signal.send({ t: 'offer', pcId: link.pcId, sdp: pc.localDescription.sdp }, link.id);
   }
 
-  /** Non-initiator: adopt the offer's transceivers and attach our tracks. */
   private async handleOffer(link: PeerLink, pcId: string, sdp: string) {
     if (link.initiator || !this.links.has(link.id) || this.left) return;
     link.lastSeen = Date.now();
     if (link.pc?.signalingState === 'closed' && link.pcId === pcId) {
-      // Our end of this connection is gone; a renegotiation can't revive it. Ask for a fresh one.
       this.closePc(link);
       link.lastRestartRequest = Date.now();
       await this.signal.send({ t: 'restart', pcId: '' }, link.id);
@@ -499,13 +680,14 @@ export class MeetingSession extends Emitter {
     if (pc.signalingState !== 'stable') {
       await pc.setLocalDescription({ type: 'rollback' }).catch(() => {});
     }
-    await pc.setRemoteDescription({ type: 'offer', sdp });
+    await pc.setRemoteDescription({ type: 'offer', sdp: tuneRemoteSdp(sdp) });
     if (pc !== link.pc) return;
     const trs = pc.getTransceivers();
     for (let i = 0; i < SLOTS.length && i < trs.length; i++) {
       trs[i].direction = 'sendrecv';
       await trs[i].sender.replaceTrack(this.localTrack(i));
     }
+    this.setCodecs(pc);
     const answer = await pc.createAnswer();
     if (pc !== link.pc) return;
     await pc.setLocalDescription(answer);
@@ -518,7 +700,7 @@ export class MeetingSession extends Emitter {
     const pc = link.pc;
     if (!pc || link.pcId !== pcId || pc.signalingState !== 'have-local-offer') return;
     link.lastSeen = Date.now();
-    await pc.setRemoteDescription({ type: 'answer', sdp });
+    await pc.setRemoteDescription({ type: 'answer', sdp: tuneRemoteSdp(sdp) });
     await this.flushIce(link);
   }
 
@@ -528,7 +710,6 @@ export class MeetingSession extends Emitter {
     if (pc && link.pcId === pcId && pc.remoteDescription) {
       for (const c of candidates) await pc.addIceCandidate(c).catch(() => {});
     } else {
-      // Candidates can beat the offer when they travel via a different broker.
       link.pendingIce.push(...candidates.map((c) => ({ pcId, c })));
       if (link.pendingIce.length > 300) link.pendingIce.splice(0, link.pendingIce.length - 300);
     }
@@ -556,7 +737,6 @@ export class MeetingSession extends Emitter {
       this.applyBitrates(link);
       void this.collectStats();
     } else if (s === 'disconnected') {
-      // Often recovers by itself within a few seconds (Wi-Fi blip). Restart ICE if not.
       link.conn = 'reconnecting';
       if (!link.restartTimer) {
         link.restartTimer = window.setTimeout(() => {
@@ -575,7 +755,7 @@ export class MeetingSession extends Emitter {
     if (link.connectTimer) clearTimeout(link.connectTimer);
     link.connectTimer = window.setTimeout(() => {
       link.connectTimer = null;
-      if (!this.links.has(link.id) || this.left) return;
+      if (!this.links.has(link.id) || this.left || link.leaving) return;
       if (link.pc?.connectionState === 'connected') return;
       if (link.attempts >= 1 && !link.everConnected) link.conn = 'failed';
       this.emit();
@@ -584,9 +764,8 @@ export class MeetingSession extends Emitter {
     }, ms);
   }
 
-  /** ICE restart, escalating to a brand-new connection if restarts don't help. */
   private restart(link: PeerLink) {
-    if (!this.links.has(link.id) || this.left || !this.signalUp) return;
+    if (!this.links.has(link.id) || this.left || !this.signalUp || link.leaving) return;
     if (!link.initiator) {
       const now = Date.now();
       if (now - link.lastRestartRequest < 3000) return;
@@ -605,28 +784,38 @@ export class MeetingSession extends Emitter {
     });
   }
 
-  /** Mesh = every sender uploads to every peer, so cap bitrate as the room grows. */
+  /** Quality preset + mesh-aware caps. Audio gets network priority over video. */
   private applyBitrates(link: PeerLink) {
     const pc = link.pc;
     if (!pc || pc.connectionState !== 'connected') return;
-    const n = this.links.size;
-    const cam = n <= 1 ? 1_800_000 : n <= 3 ? 900_000 : n <= 5 ? 500_000 : 280_000;
-    const screen = n <= 1 ? 2_500_000 : n <= 3 ? 1_500_000 : 800_000;
+    const budget = senderBudget(this.links.size);
     const trs = pc.getTransceivers();
-    const set = async (tr: RTCRtpTransceiver | undefined, maxBitrate: number, scale?: number) => {
+    const set = async (tr: RTCRtpTransceiver | undefined, fn: (p: RTCRtpSendParameters) => void) => {
       if (!tr) return;
       try {
         const p = tr.sender.getParameters();
         if (!p.encodings?.length) return;
-        p.encodings[0].maxBitrate = maxBitrate;
-        if (scale) p.encodings[0].scaleResolutionDownBy = scale;
+        fn(p);
         await tr.sender.setParameters(p);
       } catch {
         /* not negotiated yet */
       }
     };
-    void set(trs[1], cam, n > 5 ? 2 : 1);
-    void set(trs[2], screen);
+    void set(trs[0], (p) => {
+      p.encodings[0].priority = 'high';
+      p.encodings[0].networkPriority = 'high';
+    });
+    void set(trs[1], (p) => {
+      const e = p.encodings[0];
+      e.maxBitrate = budget.cam;
+      e.maxFramerate = budget.fps;
+      e.scaleResolutionDownBy = budget.scale;
+      (p as RTCRtpSendParameters & { degradationPreference?: string }).degradationPreference = 'balanced';
+    });
+    void set(trs[2], (p) => {
+      p.encodings[0].maxBitrate = budget.screen;
+      (p as RTCRtpSendParameters & { degradationPreference?: string }).degradationPreference = 'maintain-resolution';
+    });
   }
 
   private async collectStats() {
@@ -645,16 +834,38 @@ export class MeetingSession extends Emitter {
             if (r.type === 'candidate-pair' && r.state === 'succeeded' && r.nominated) pair = r;
           });
         }
-        if (!pair) continue;
-        const lc = stats.get(pair.localCandidateId);
-        const rc = stats.get(pair.remoteCandidateId);
-        const relay = lc?.candidateType === 'relay' || rc?.candidateType === 'relay';
-        const rtt = pair.currentRoundTripTime != null ? Math.round(pair.currentRoundTripTime * 1000) : null;
-        if (relay !== link.relay || rtt !== link.rtt) {
-          link.relay = relay;
-          link.rtt = rtt;
-          changed = true;
+        if (pair) {
+          const lc = stats.get(pair.localCandidateId);
+          const rc = stats.get(pair.remoteCandidateId);
+          link.relay = lc?.candidateType === 'relay' || rc?.candidateType === 'relay';
+          link.rtt = pair.currentRoundTripTime != null ? Math.round(pair.currentRoundTripTime * 1000) : null;
         }
+        // Incoming camera video (transceiver 1).
+        const camMid = pc.getTransceivers()[1]?.mid;
+        stats.forEach((r) => {
+          if (r.type !== 'inbound-rtp' || r.kind !== 'video' || r.mid !== camMid) return;
+          const now = r.timestamp as number;
+          const prev = link.prevInbound;
+          const jbDelay = (r.jitterBufferDelay as number) || 0;
+          const jbCount = (r.jitterBufferEmittedCount as number) || 0;
+          let kbps = link.stats?.kbps ?? 0;
+          let buffer: number | null = null;
+          if (prev && now > prev.ts) {
+            kbps = Math.round((((r.bytesReceived as number) - prev.bytes) * 8) / (now - prev.ts));
+            if (jbCount > prev.jbCount) buffer = ((jbDelay - prev.jbDelay) / (jbCount - prev.jbCount)) * 1000;
+          }
+          link.prevInbound = { bytes: r.bytesReceived as number, ts: now, jbDelay, jbCount };
+          const codec = r.codecId ? (stats.get(r.codecId)?.mimeType as string | undefined)?.replace('video/', '') ?? '' : '';
+          link.stats = {
+            width: (r.frameWidth as number) || 0,
+            height: (r.frameHeight as number) || 0,
+            fps: Math.round((r.framesPerSecond as number) || 0),
+            kbps,
+            delayMs: buffer != null && link.rtt != null ? Math.round(link.rtt / 2 + buffer + 15) : (link.stats?.delayMs ?? null),
+            codec,
+          };
+        });
+        changed = true;
       } catch {
         /* pc closed mid-call */
       }
@@ -672,14 +883,18 @@ export class MeetingSession extends Emitter {
       audio: this.local.micOn && !!this.local.mic,
       video: !!this.local.cam,
       screen: !!this.local.screen,
+      hand: this.hand,
       conn: 'connected',
       relay: null,
       rtt: null,
+      stats: null,
       micStream: this.local.micStream,
       camStream: this.local.camStream,
       screenStream: this.local.screenStream,
       screenAudioStream: null,
       joinedAt: this.joinedAt,
+      leaving: false,
+      roomPhoto: this.roomPhoto,
     };
     const others: Participant[] = [...this.links.values()]
       .sort((a, b) => a.joinedAt - b.joinedAt)
@@ -690,14 +905,18 @@ export class MeetingSession extends Emitter {
         audio: l.info.audio,
         video: l.info.video,
         screen: l.info.screen,
-        conn: l.conn,
+        hand: !!l.info.hand,
+        conn: l.leaving ? 'connected' : l.conn,
         relay: l.relay,
         rtt: l.rtt,
+        stats: l.stats,
         micStream: l.media.mic,
         camStream: l.media.cam,
-        screenStream: l.media.screen,
+        screenStream: l.leaving ? null : l.media.screen,
         screenAudioStream: l.media.screenAudio,
         joinedAt: l.joinedAt,
+        leaving: l.leaving,
+        roomPhoto: l.roomPhoto,
       }));
     return {
       left: this.left,

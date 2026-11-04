@@ -136,6 +136,41 @@ async function withDump(fn) {
   }
 }
 
+/** A short sine-wave WAV file, used to test soundboard uploads. */
+function makeWav(seconds = 1.5, freq = 523) {
+  const sr = 44100;
+  const n = Math.floor(sr * seconds);
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write('RIFF', 0);
+  buf.writeUInt32LE(36 + n * 2, 4);
+  buf.write('WAVEfmt ', 8);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(sr, 24);
+  buf.writeUInt32LE(sr * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write('data', 36);
+  buf.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) buf.writeInt16LE(Math.round(Math.sin((2 * Math.PI * freq * i) / sr) * 20000), 44 + i * 2);
+  return buf;
+}
+
+/** Audio energy B receives on the soundboard / screen-audio channel (transceiver 3). */
+const boardEnergy = (page) =>
+  page.evaluate(async () => {
+    for (const l of window.__yapameet.links.values()) {
+      const mid = l.pc.getTransceivers()[3].mid;
+      let e = 0;
+      (await l.pc.getStats()).forEach((r) => {
+        if (r.type === 'inbound-rtp' && r.kind === 'audio' && r.mid === mid) e = r.totalAudioEnergy || 0;
+      });
+      return e;
+    }
+    return 0;
+  });
+
 let A, B;
 
 async function joinMeeting(p, code, name) {
@@ -348,6 +383,235 @@ async function main() {
       await A.page.locator('[data-testid="ctrl-people"]').click();
     });
 
+    await step('Quality: received video reaches HD quickly (start-bitrate fix)', async () => {
+      const t0 = Date.now();
+      const res = await until(
+        async () => {
+          const s = await B.page.evaluate(async () => {
+            for (const l of window.__yapameet.links.values()) {
+              const mid = l.pc.getTransceivers()[1].mid;
+              let out = null;
+              (await l.pc.getStats()).forEach((r) => {
+                if (r.type === 'inbound-rtp' && r.kind === 'video' && r.mid === mid) out = { w: r.frameWidth, h: r.frameHeight, fps: r.framesPerSecond };
+              });
+              return out;
+            }
+          });
+          return s && s.w >= 1280 ? s : false;
+        },
+        { what: 'B receiving 720p from A', timeout: 20000 },
+      );
+      return `${res.w}x${res.h}@${Math.round(res.fps || 0)}fps after ${Date.now() - t0} ms of checking`;
+    });
+
+    await step('Stats overlay shows resolution, bitrate, delay and codec', async () => {
+      await B.page.evaluate(() => window.__yapameetSettings.update({ showConnectionDetails: true }));
+      const text = await until(
+        async () => {
+          const t = await B.page.locator('[data-testid="tile-stats"]').innerText().catch(() => '');
+          return /\d+p/.test(t) && /ms/.test(t) && /(kbps|Mbps)/.test(t) ? t : false;
+        },
+        { what: 'stats text', timeout: 15000 },
+      );
+      return text.replace(/\s+/g, ' ');
+    });
+
+    const sampleRemote = (page) =>
+      page.evaluate(() => {
+        const v = document.querySelector('[data-testid="tile-remote-cam"] video');
+        const c = document.createElement('canvas');
+        c.width = 64;
+        c.height = 36;
+        const g = c.getContext('2d');
+        g.drawImage(v, 0, 0, 64, 36);
+        const d = g.getImageData(0, 0, 64, 36).data;
+        let sat = 0, r = 0, gg = 0, b = 0;
+        const n = d.length / 4;
+        for (let i = 0; i < d.length; i += 4) {
+          const mx = Math.max(d[i], d[i + 1], d[i + 2]);
+          const mn = Math.min(d[i], d[i + 1], d[i + 2]);
+          sat += mx ? (mx - mn) / mx : 0;
+          r += d[i];
+          gg += d[i + 1];
+          b += d[i + 2];
+        }
+        return { sat: +(sat / n).toFixed(3), r: Math.round(r / n), g: Math.round(gg / n), b: Math.round(b / n) };
+      });
+
+    await step('Effects: blur loads the segmenter, video keeps flowing to B', async () => {
+      const before = await A.page.evaluate(() => window.__yapameet.local.cam.id);
+      await A.page.locator('[data-testid="ctrl-effects"]').click();
+      await A.page.locator('[data-testid="bg-blur"]').click();
+      await until(() => A.page.evaluate(() => !!window.__yapameet.local.pipeline?.segmenterReady), { what: 'segmenter ready', timeout: 30000 });
+      const swapped = await A.page.evaluate((before) => {
+        const s = window.__yapameet;
+        const sent = [...s.links.values()][0].pc.getTransceivers()[1].sender.track?.id;
+        return s.local.cam.id !== before && sent === s.local.cam.id;
+      }, before);
+      if (!swapped) throw new Error('effects track not being sent');
+      await until(() => remoteVideoPlaying(B.page), { what: 'B frames with blur' });
+      return 'segmentation running, processed track sent';
+    });
+
+    await step('Effects: B&W filter actually reaches B (color saturation drops)', async () => {
+      await A.page.locator('[data-testid="bg-none"]').click();
+      await A.page.locator('[data-testid="filter-none"]').click();
+      await sleep(1500);
+      const color = await sampleRemote(B.page);
+      await A.page.locator('[data-testid="filter-bw"]').click();
+      const bw = await until(
+        async () => {
+          const s = await sampleRemote(B.page);
+          return s.sat < 0.05 ? s : false;
+        },
+        { what: 'grayscale frames on B', timeout: 10000 },
+      );
+      if (color.sat < 0.1) return `baseline already gray (${color.sat}), filter applied (${bw.sat})`;
+      return `saturation ${color.sat} -> ${bw.sat}`;
+    });
+
+    await step('Effects: virtual background replaces the scene for B', async () => {
+      await A.page.locator('[data-testid="filter-none"]').click();
+      await sleep(800);
+      const plain = await sampleRemote(B.page);
+      await A.page.locator('[data-testid="bg-preset:synthwave"]').click();
+      const withBg = await until(
+        async () => {
+          const s = await sampleRemote(B.page);
+          return Math.abs(s.r - plain.r) + Math.abs(s.g - plain.g) + Math.abs(s.b - plain.b) > 40 ? s : false;
+        },
+        { what: 'scene change on B', timeout: 10000 },
+      );
+      await A.page.locator('[data-testid="bg-none"]').click();
+      await until(() => A.page.evaluate(() => window.__yapameet.local.pipeline === null && window.__yapameet.local.cam === window.__yapameet.local.rawCam), {
+        what: 'back to raw camera',
+      });
+      await A.page.keyboard.press('Escape');
+      await until(() => remoteVideoPlaying(B.page), { what: 'frames after effects off' });
+      return `avg color ${plain.r},${plain.g},${plain.b} -> ${withBg.r},${withBg.g},${withBg.b}`;
+    });
+
+    await step('Reactions float on the other side', async () => {
+      await A.page.locator('[data-testid="ctrl-react"]').click();
+      await A.page.getByRole('menuitem', { name: 'React 🎉' }).click();
+      await until(async () => (await B.page.locator('[data-testid="reaction-float"]').allInnerTexts()).some((t) => t.includes('🎉') && t.includes('Alice')), {
+        what: 'reaction on B',
+      });
+      await A.page.keyboard.press('Escape');
+    });
+
+    await step('Raise hand: badge + toast on B, lower removes it', async () => {
+      await A.page.locator('[data-testid="ctrl-hand"]').click();
+      await until(() => B.page.locator('[data-testid="tile-remote-cam"] [data-testid="hand-badge"]').count(), { what: 'hand badge on B' });
+      await A.page.locator('[data-testid="ctrl-hand"]').click();
+      await until(async () => (await B.page.locator('[data-testid="hand-badge"]').count()) === 0, { what: 'hand lowered' });
+    });
+
+    await step('Muted warning: talking while muted shows a nudge', async () => {
+      // Chromium's fake mic plays a constant beep, so A is "talking" while muted.
+      await A.page.locator('[data-testid="ctrl-mic"]').click();
+      await until(async () => (await B.page.locator('[data-testid="tile-remote-cam"]').getAttribute('data-audio')) === 'off', { what: 'muted' });
+      return await until(async () => (await A.page.locator('.toast').allInnerTexts()).find((x) => x.includes("You're muted")), {
+        what: 'muted toast',
+        timeout: 8000,
+      });
+    });
+
+    await step('Push to talk: holding Space while muted unmutes for B, release mutes', async () => {
+      await A.page.locator('body').click({ position: { x: 5, y: 300 } });
+      await A.page.keyboard.down('Space');
+      await until(async () => (await B.page.locator('[data-testid="tile-remote-cam"]').getAttribute('data-audio')) === 'on', { what: 'PTT on' });
+      await A.page.keyboard.up('Space');
+      await until(async () => (await B.page.locator('[data-testid="tile-remote-cam"]').getAttribute('data-audio')) === 'off', { what: 'PTT off' });
+      await A.page.locator('[data-testid="ctrl-mic"]').click();
+    });
+
+    await step('Chat commands: /roll and /shrug reach B, /help is local only', async () => {
+      if (!(await A.page.locator('[data-testid="chat-input"]').count())) await A.page.locator('[data-testid="ctrl-chat"]').click();
+      for (const cmd of ['/help', '/roll 20', '/shrug ok']) {
+        await A.page.locator('[data-testid="chat-input"]').fill(cmd);
+        await A.page.locator('[data-testid="chat-input"]').press('Enter');
+      }
+      await until(() => A.page.locator('[data-testid="chat-note"]').count(), { what: 'help note' });
+      const got = await until(
+        async () => {
+          const texts = await B.page.evaluate(() => window.__yapameet.getSnapshot().messages.map((m) => m.text));
+          return texts.some((t) => /rolled \d+ \(1-20\)/.test(t)) && texts.some((t) => t.includes('ok ¯\\_(ツ)_/¯')) ? texts : false;
+        },
+        { what: 'commands on B' },
+      );
+      if (got.some((t) => t.startsWith('Commands:'))) throw new Error('/help leaked to B');
+    });
+
+    await step('Easter eggs: /party and "do a barrel roll" hit both screens', async () => {
+      await A.page.locator('[data-testid="chat-input"]').fill('/party');
+      await A.page.locator('[data-testid="chat-input"]').press('Enter');
+      await until(() => B.page.evaluate(() => document.documentElement.classList.contains('fx-party')), { what: 'party on B' });
+      await A.page.locator('[data-testid="chat-input"]').fill('do a barrel roll!');
+      await A.page.locator('[data-testid="chat-input"]').press('Enter');
+      await until(() => B.page.evaluate(() => document.documentElement.classList.contains('fx-barrelroll')), { what: 'barrel roll on B', interval: 50 });
+      const eggs = await A.page.evaluate(() => window.__yapameetSettings.get().eggs);
+      if (!eggs.includes('party') || !eggs.includes('barrelroll')) throw new Error(`eggs ${eggs}`);
+      await A.page.locator('[data-testid="ctrl-chat"]').click();
+    });
+
+    await step('Easter egg: Konami code unlocks the Arcade theme', async () => {
+      await A.page.locator('body').click({ position: { x: 5, y: 300 } });
+      for (const k of ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a']) {
+        await A.page.keyboard.press(k);
+      }
+      await until(() => A.page.evaluate(() => document.documentElement.dataset.theme === 'arcade'), { what: 'arcade theme' });
+      await A.page.evaluate(() => window.__yapameetSettings.update({ theme: 'midnight' }));
+    });
+
+    await step('Soundboard: built-in pad is heard by B even while A is muted', async () => {
+      await A.page.locator('[data-testid="ctrl-mic"]').click();
+      await until(async () => (await B.page.locator('[data-testid="tile-remote-cam"]').getAttribute('data-audio')) === 'off', { what: 'muted' });
+      await A.page.locator('[data-testid="ctrl-tools"]').click();
+      const e0 = await boardEnergy(B.page);
+      await A.page.locator('[data-testid="pad-builtin:airhorn"]').click();
+      const e1 = await until(async () => {
+        const e = await boardEnergy(B.page);
+        return e - e0 > 0.01 ? e : false;
+      }, { what: 'soundboard audio on B', timeout: 8000 });
+      await A.page.locator('[data-testid="ctrl-mic"]').click();
+      return `energy +${(e1 - e0).toFixed(3)} on the soundboard channel`;
+    });
+
+    await step('Soundboard: upload an audio file, it becomes a pad and plays for B', async () => {
+      await A.page.locator('[data-testid="sound-file"]').setInputFiles({ name: 'honk.wav', mimeType: 'audio/wav', buffer: makeWav() });
+      const pad = A.page.locator('[data-testid^="pad-custom:"]').filter({ hasText: 'honk' });
+      await pad.waitFor({ timeout: 8000 });
+      await sleep(2500);
+      const e0 = await boardEnergy(B.page);
+      await pad.click();
+      await until(async () => (await boardEnergy(B.page)) - e0 > 0.01, { what: 'uploaded sound on B', timeout: 8000 });
+      return 'honk.wav uploaded, stored and played';
+    });
+
+    await step('Tools: fun buttons trigger effects on both screens', async () => {
+      await A.page.locator('[data-testid="tool-barrelroll"]').click();
+      await until(() => B.page.evaluate(() => document.documentElement.classList.contains('fx-barrelroll')), { what: 'barrel roll on B', interval: 50 });
+      await A.page.locator('[data-testid="tool-dice"]').click();
+      await until(() => B.page.evaluate(() => window.__yapameet.getSnapshot().messages.some((m) => m.text.startsWith('🎲 rolled'))), { what: 'dice on B' });
+      await A.page.locator('[data-testid="ctrl-tools"]').click();
+    });
+
+    await step('Chat: typing indicator and new-message preview bubble', async () => {
+      if (await B.page.locator('[data-testid="chat-input"]').count()) await B.page.locator('[data-testid="ctrl-chat"]').click();
+      if (!(await A.page.locator('[data-testid="chat-input"]').count())) await A.page.locator('[data-testid="ctrl-chat"]').click();
+      await A.page.locator('[data-testid="chat-input"]').fill('preview me');
+      await A.page.locator('[data-testid="chat-input"]').press('Enter');
+      await until(async () => (await B.page.locator('[data-testid="chat-preview"]').innerText().catch(() => '')).includes('preview me'), { what: 'preview bubble on B' });
+      await B.page.locator('[data-testid="chat-preview"]').click();
+      await B.page.locator('[data-testid="chat-input"]').waitFor();
+      await A.page.locator('[data-testid="chat-input"]').pressSequentially('typing now', { delay: 30 });
+      await until(async () => (await B.page.locator('[data-testid="typing-line"]').innerText()).includes('Alice is typing'), { what: 'typing indicator on B' });
+      await A.page.locator('[data-testid="chat-input"]').fill('');
+      await A.page.locator('[data-testid="ctrl-chat"]').click();
+      await B.page.locator('[data-testid="ctrl-chat"]').click();
+    });
+
     await step('Leave: A sees B leave quickly; Rejoin reconnects', async () => {
       const t0 = Date.now();
       await B.page.locator('[data-testid="ctrl-leave"]').click();
@@ -448,8 +712,41 @@ async function main() {
       }
     });
 
-    await step('Leaving cleans up peer connections and tracks', async () => {
+    await step('Ghost Protocol: triple-click logo, capture empty room, B receives the photo', async () => {
+      const logo = A.page.locator('[data-testid="call-logo"]');
+      await logo.click();
+      await logo.click();
+      await logo.click();
+      await A.page.locator('[data-testid="ghost-dialog"]').waitFor();
+      await A.page.locator('[data-testid="ghost-start"]').click();
+      await A.page.locator('[data-testid="ghost-done"]').waitFor({ timeout: 12000 });
+      await A.page.locator('[data-testid="ghost-done"]').click();
+      const size = await until(
+        () =>
+          B.page.evaluate(() => {
+            const l = [...window.__yapameet.links.values()][0];
+            return l?.roomPhoto?.length || 0;
+          }),
+        { what: 'room photo on B' },
+      );
+      return `photo ${Math.round(size / 1024)} KB delivered peer-to-peer`;
+    });
+
+    await step('Ghost Protocol: when A leaves, B sees A fade into the empty room, then the tile goes', async () => {
       await A.page.locator('[data-testid="ctrl-leave"]').click();
+      await until(async () => (await B.page.locator('[data-testid="tile-remote-cam"]').getAttribute('data-leaving')) === 'ghost', {
+        what: 'ghost tile on B',
+        interval: 50,
+      });
+      const hasRoom = await B.page.locator('[data-testid="tile-remote-cam"] .ghost-room').count();
+      const fading = await B.page.locator('[data-testid="tile-remote-cam"] .ghost-freeze.fading').count();
+      if (!hasRoom || !fading) throw new Error(`room=${hasRoom} fading=${fading}`);
+      const t0 = Date.now();
+      await until(async () => (await B.page.locator('[data-testid="tile-remote-cam"]').count()) === 0, { what: 'tile removed', timeout: 10000 });
+      return `fade ran ${Date.now() - t0} ms`;
+    });
+
+    await step('Leaving cleans up peer connections and tracks', async () => {
       await A.page.locator('[data-testid="rejoin"]').waitFor();
       const leak = await A.page.evaluate(() => ({ session: !!window.__yapameet, videos: document.querySelectorAll('video').length }));
       if (leak.session || leak.videos) throw new Error(JSON.stringify(leak));

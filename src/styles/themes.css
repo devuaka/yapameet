@@ -1,0 +1,191 @@
+/* Themes: set on <html data-theme="...">. Everything else derives from these. */
+
+[data-theme='nebula'] {
+  --bg: #0f0a1a;
+  --bg-2: #150e24;
+  --surface: #1c1430;
+  --surface-2: #251a3e;
+  --surface-3: #33244f;
+  --text: #f3ecff;
+  --text-2: #c9b8e6;
+  --muted: #9a88b8;
+  --accent: #ec4899;
+  --accent-2: #8b5cf6;
+  --glow-3: rgba(139, 92, 246, 0.12);
+}
+
+[data-theme='ocean'] {
+  --bg: #04121a;
+  --bg-2: #071a25;
+  --surface: #0b2230;
+  --surface-2: #102c3d;
+  --surface-3: #163a50;
+  --text: #e6f6ff;
+  --text-2: #a9cfe0;
+  --muted: #7aa3b8;
+  --accent: #06b6d4;
+  --accent-2: #3b82f6;
+  --glow-3: rgba(20, 184, 166, 0.1);
+}
+
+[data-theme='sunset'] {
+  --bg: #160b0c;
+  --bg-2: #1e1012;
+  --surface: #26151a;
+  --surface-2: #321c22;
+  --surface-3: #43262e;
+  --text: #fff1ec;
+  --text-2: #e7c2b8;
+  --muted: #b98f86;
+  --accent: #f97316;
+  --accent-2: #ec4899;
+  --glow-3: rgba(250, 204, 21, 0.08);
+}
+
+[data-theme='forest'] {
+  --bg: #07120c;
+  --bg-2: #0b1a12;
+  --surface: #102418;
+  --surface-2: #152e1f;
+  --surface-3: #1d3d2a;
+  --text: #ecfdf3;
+  --text-2: #b4dcc4;
+  --muted: #84ad95;
+  --accent: #22c55e;
+  --accent-2: #14b8a6;
+  --glow-3: rgba(234, 179, 8, 0.07);
+}
+
+[data-theme='synthwave'] {
+  --bg: #0d0221;
+  --bg-2: #13052e;
+  --surface: #1a0a3b;
+  --surface-2: #241050;
+  --surface-3: #331866;
+  --text: #fdf0ff;
+  --text-2: #d4b6f0;
+  --muted: #a487c4;
+  --accent: #ff2a6d;
+  --accent-2: #05d9e8;
+  --glow-3: rgba(255, 230, 109, 0.1);
+}
+
+[data-theme='mono'] {
+  --bg: #0c0c0d;
+  --bg-2: #121214;
+  --surface: #18181b;
+  --surface-2: #202024;
+  --surface-3: #2c2c31;
+  --text: #f4f4f5;
+  --text-2: #c4c4c8;
+  --muted: #8e8e95;
+  --accent: #e4e4e7;
+  --accent-2: #a1a1aa;
+  --accent-strong: #ffffff;
+  --accent-text: #ffffff;
+  --on-accent: #111113;
+  --glow-1: rgba(255, 255, 255, 0.05);
+  --glow-2: rgba(255, 255, 255, 0.03);
+  --glow-3: transparent;
+}
+
+[data-theme='amoled'] {
+  --bg: #000000;
+  --bg-2: #050505;
+  --surface: #0b0b0d;
+  --surface-2: #121216;
+  --surface-3: #1c1c22;
+  --text: #f5f5f7;
+  --text-2: #b9b9c3;
+  --muted: #85858f;
+  --glow-1: transparent;
+  --glow-2: transparent;
+  --glow-3: transparent;
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='daylight'] {
+  --bg: #f4f5fb;
+  --bg-2: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #eef0f8;
+  --surface-3: #e2e5f2;
+  --text: #15172b;
+  --text-2: #3d4263;
+  --muted: #6b7091;
+  --accent: #6d5df6;
+  --accent-2: #3b82f6;
+  --accent-strong: #5b4ae8;
+  --accent-text: #4c3bd6;
+  --hover: #d6d9ec;
+  --overlay-strong: rgba(255, 255, 255, 0.85);
+  --glow-1: rgba(109, 93, 246, 0.14);
+  --glow-2: rgba(59, 130, 246, 0.1);
+  --glow-3: rgba(236, 72, 153, 0.06);
+  --danger-text: #b91c1c;
+  --warn-text: #92400e;
+  --shadow: 0 16px 40px rgba(30, 35, 80, 0.12);
+  color-scheme: light;
+}
+[data-theme='daylight'] .call {
+  background: var(--bg);
+}
+[data-theme='daylight'] .round-btn {
+  color: #fff;
+}
+
+/* ---- secret themes ---- */
+[data-theme='arcade'] {
+  --bg: #050505;
+  --bg-2: #0a0a0a;
+  --surface: #0f120f;
+  --surface-2: #151a15;
+  --surface-3: #1f281f;
+  --text: #d9ffd0;
+  --text-2: #9fe08f;
+  --muted: #6ea562;
+  --accent: #39ff14;
+  --accent-2: #00e5ff;
+  --on-accent: #031a00;
+  --font-brand: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  --glow-1: rgba(57, 255, 20, 0.1);
+  --glow-2: rgba(0, 229, 255, 0.08);
+  --glow-3: transparent;
+}
+[data-theme='arcade'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px);
+  mix-blend-mode: multiply;
+}
+
+[data-theme='bubblegum'] {
+  --bg: #1a0b18;
+  --bg-2: #220f20;
+  --surface: #2b1329;
+  --surface-2: #381a35;
+  --surface-3: #4a2346;
+  --text: #fff0fb;
+  --text-2: #f5c2e7;
+  --muted: #c48fb6;
+  --accent: #ff6ad5;
+  --accent-2: #ffb86c;
+  --glow-3: rgba(139, 233, 253, 0.1);
+}
+
+/* Video overlays always sit on dark video, so keep their text white in every theme. */
+.tile-label,
+.tile-status,
+.tile-details,
+.tile-actions,
+.preview-name,
+.hand-badge {
+  color: #fff;
+}
+
+body {
+  transition: background-color 0.3s ease;
+}
