@@ -66,6 +66,7 @@ export interface Settings {
   mutedWarning: boolean;
   reactionsFloat: boolean;
   soundboardVolume: number;
+  autoMiniPlayer: boolean;
   // secrets
   eggs: EggId[];
 }
@@ -103,6 +104,7 @@ export const defaultSettings: Settings = {
   mutedWarning: true,
   reactionsFloat: true,
   soundboardVolume: 0.8,
+  autoMiniPlayer: true,
   eggs: [],
 };
 

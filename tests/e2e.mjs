@@ -612,6 +612,38 @@ async function main() {
       await B.page.locator('[data-testid="ctrl-chat"]').click();
     });
 
+    await step('Mini player: opens a floating window with the call, its buttons control the call', async () => {
+      const supported = await A.page.evaluate(() => 'documentPictureInPicture' in window);
+      if (!supported) return 'SKIPPED: Document Picture-in-Picture not available in this browser mode';
+      await A.page.locator('[data-testid="ctrl-mini"]').click();
+      await until(() => A.page.evaluate(() => !!window.documentPictureInPicture.window?.document.querySelector('[data-testid="mini-player"]')), { what: 'mini player window' });
+      const frames = await until(
+        () =>
+          A.page.evaluate(async () => {
+            const v = window.documentPictureInPicture.window.document.querySelector('.mini-tile video');
+            if (!v || !v.videoWidth) return false;
+            let n = 0;
+            await new Promise((res) => {
+              const cb = () => {
+                n++;
+                v.requestVideoFrameCallback(cb);
+              };
+              v.requestVideoFrameCallback(cb);
+              setTimeout(res, 700);
+            });
+            return n >= 2 ? `${v.videoWidth}x${v.videoHeight}` : false;
+          }),
+        { what: 'video playing in mini player' },
+      );
+      await A.page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('[data-testid="mini-mic"]').click());
+      await until(async () => (await B.page.locator('[data-testid="tile-remote-cam"]').getAttribute('data-audio')) === 'off', { what: 'muted from mini player' });
+      await A.page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('[data-testid="mini-mic"]').click());
+      await until(async () => (await B.page.locator('[data-testid="tile-remote-cam"]').getAttribute('data-audio')) === 'on', { what: 'unmuted from mini player' });
+      await A.page.evaluate(() => window.documentPictureInPicture.window.document.querySelector('[data-testid="mini-back"]').click());
+      await until(() => A.page.evaluate(() => !window.documentPictureInPicture.window), { what: 'mini player closed' });
+      return `remote video ${frames} in the mini player; mute/unmute from inside it reached B`;
+    });
+
     await step('Leave: A sees B leave quickly; Rejoin reconnects', async () => {
       const t0 = Date.now();
       await B.page.locator('[data-testid="ctrl-leave"]').click();

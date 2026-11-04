@@ -414,6 +414,12 @@ export function MeetingPanel() {
           testId="layout-select"
         />
         <Toggle label="Hide my own video" hint="Others still see you" checked={s.hideSelfView} onChange={(v) => updateSettings({ hideSelfView: v })} />
+        <Toggle
+          label="Mini player when I switch tabs"
+          hint="A small floating window with the call and your controls (Chrome and Edge)"
+          checked={s.autoMiniPlayer}
+          onChange={(v) => updateSettings({ autoMiniPlayer: v })}
+        />
         <Toggle label="Floating reactions" checked={s.reactionsFloat} onChange={(v) => updateSettings({ reactionsFloat: v })} />
         <Toggle
           label="Show connection stats on tiles"

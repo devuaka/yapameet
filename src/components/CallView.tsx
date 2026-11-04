@@ -18,6 +18,7 @@ import {
   VideoOff,
   WifiOff,
   Wand2,
+  PictureInPicture2,
 } from 'lucide-react';
 import type { ChatMessage, MeetingSession, SessionEvent } from '../rtc/MeetingSession';
 import type { LocalMedia } from '../rtc/LocalMedia';
@@ -35,6 +36,7 @@ import { GhostDialog } from './GhostDialog';
 import { RemoteAudio } from './media';
 import { ParticipantsPanel } from './ParticipantsPanel';
 import { ToolsPanel } from './ToolsPanel';
+import { miniPlayerSupported, useMiniPlayer } from './MiniPlayer';
 import { ReactionLayer, ReactionPicker, type FloatingReaction } from './Reactions';
 import { copyText, useToast } from './Toast';
 import { VideoGrid } from './VideoGrid';
@@ -105,6 +107,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   const [preview, setPreview] = useState<ChatMessage | null>(null);
   const pttRef = useRef(false);
   pttRef.current = ptt;
+  const mini = useMiniPlayer(session, local, onLeave);
 
   const me = snap.participants[0];
   const remotes = snap.participants.slice(1);
@@ -606,6 +609,16 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             testId="ctrl-hand"
           />
           <CtrlButton icon={<SettingsIcon size={22} />} label="Settings" onClick={() => setSettingsTab('audio')} testId="ctrl-settings" className="hide-xs" />
+          {miniPlayerSupported() && (
+            <CtrlButton
+              icon={<PictureInPicture2 size={22} />}
+              label={mini.open ? 'Close mini player' : 'Mini player'}
+              active={mini.open}
+              onClick={() => (mini.open ? mini.close() : void mini.openMini())}
+              className="hide-sm"
+              testId="ctrl-mini"
+            />
+          )}
           <CtrlButton
             icon={isFullscreen ? <Minimize size={22} /> : <Maximize size={22} />}
             label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
