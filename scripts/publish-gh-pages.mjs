@@ -2,7 +2,7 @@
 //   npm run publish:gh            -> builds, pushes source to `main`, built site to `gh-pages`
 // Env: GH_REPO=owner/name (default: <your gh user>/yapameet), SKIP_SOURCE=1 to only update the site.
 // Requires `gh auth login`. The repo must be public for free GitHub Pages.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
@@ -31,9 +31,8 @@ if (!tryApi('GET', `repos/${repo}`)) {
 }
 
 console.log(`Building with base /${name}/ …`);
-execFileSync('npm', ['run', 'build'], {
+execSync('npm run build', {
   stdio: 'inherit',
-  shell: true,
   env: { ...process.env, VITE_BASE: process.env.VITE_BASE || `/${name}/`, SPA_404: '1' },
 });
 

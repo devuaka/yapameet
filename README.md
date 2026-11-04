@@ -155,6 +155,16 @@ Deep links like `/meeting/abc-defg-hij` work automatically: Cloudflare Pages ser
 
 ### GitHub Pages
 
+**One command (no git needed, just the GitHub CLI logged in with `gh auth login`):**
+
+```bash
+npm run publish:gh
+```
+
+This creates a public repo `<you>/yapameet` if needed, pushes the source to `main` and the built site to `gh-pages`, and turns on Pages. Re-run it to redeploy. `GH_REPO=owner/name` picks another repo. Put any `VITE_*` settings in `.env.local` first; they're baked into the build.
+
+**Or with the included Actions workflow** (your token needs the `workflow` scope to push it):
+
 1. Push to GitHub (branch `main`).
 2. Repo Settings > Pages > Source: **GitHub Actions**.
 3. Optional: Settings > Secrets and variables > Actions > **Variables**: add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, etc.

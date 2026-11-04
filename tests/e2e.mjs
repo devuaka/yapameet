@@ -58,7 +58,7 @@ async function launch(channel, label) {
     ],
   });
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  await context.grantPermissions(['camera', 'microphone'], { origin: BASE });
+  await context.grantPermissions(['camera', 'microphone'], { origin: new URL(BASE).origin });
   const page = await context.newPage();
   page.on('console', (m) => {
     if (m.type() === 'error' || m.text().includes('[yapameet]')) console.log(`    [${label} console] ${m.text()}`);
