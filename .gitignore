@@ -6,3 +6,4 @@ dist
 *.log
 .wrangler
 public/mediapipe
+tests/fixtures

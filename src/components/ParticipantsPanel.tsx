@@ -1,4 +1,4 @@
-import { Copy, Hand, Mic, MicOff, MonitorUp, Video, VideoOff, X } from 'lucide-react';
+import { Copy, Hand, Mic, MicOff, MonitorUp, Video, VideoOff } from 'lucide-react';
 import type { Participant } from '../rtc/MeetingSession';
 import { Avatar } from './controls';
 import { useSpeaking } from './media';
@@ -37,21 +37,13 @@ function Row({ p }: { p: Participant }) {
 
 export function ParticipantsPanel({
   participants,
-  onClose,
   onCopyLink,
 }: {
   participants: Participant[];
-  onClose: () => void;
   onCopyLink: () => void;
 }) {
   return (
-    <aside className="side-panel" aria-label="People">
-      <div className="side-head">
-        <h2>People · {participants.length}</h2>
-        <button className="icon-btn ghost" onClick={onClose} aria-label="Close people">
-          <X size={20} />
-        </button>
-      </div>
+    <div className="side-content" aria-label="People">
       <button className="btn btn-ghost btn-block" onClick={onCopyLink}>
         <Copy size={16} /> Copy invite link
       </button>
@@ -66,6 +58,6 @@ export function ParticipantsPanel({
           calls get choppy.
         </p>
       )}
-    </aside>
+    </div>
   );
 }

@@ -18,6 +18,10 @@ Free, browser-based video meetings. Create a link, send it, talk. No accounts, n
 - **Reactions**, **raise hand**, **push to talk** (hold Space while muted), "you're muted" warning
 - **Soundboard**: 8 built-in synthesized sounds + upload your own MP3/WAV/OGG/M4A (stored on your device). Everyone hears them, even while you're muted
 - **Mini player**: switch tabs during a call and Chrome/Edge pop out a floating window with the call and your controls (Document Picture-in-Picture + Media Session auto-PiP, like Meet); there's also a manual button
+- **Watch together**: paste a YouTube link or a catbox.moe / litterbox (or any direct .mp4/.webm) link; play, pause and seeking are synced for everyone, drift is corrected automatically, the end of the video stops everyone, late joiners jump in at the right spot
+- **Swear filter** (on by default, per person) for chat, captions, polls and transcripts. Live voice can't be filtered: speech recognition only knows a word after everyone heard it
+- **Hear myself** toggle for the voice changer (use headphones)
+- **Organised call screen**: Mic ▾ and Camera ▾ dropdowns (devices, speakers, quick blur, auto-framing, voice changer), a ⋮ More menu for everything else, and one side panel with People / Chat / Activities tabs; Activities is a launcher where every tool has its own page
 - **Collaborative whiteboard** (pen, highlighter, eraser, colors, undo, clear, save as PNG); people who join late get the current board
 - **Polls** with live results (named or anonymous) and a **shared countdown timer**
 - **Live captions** with speaker names and a downloadable transcript (each person's own browser transcribes their own mic; Chrome/Edge)

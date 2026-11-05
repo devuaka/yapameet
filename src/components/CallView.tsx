@@ -17,18 +17,37 @@ import {
   Video,
   VideoOff,
   WifiOff,
-  Wand2,
   PictureInPicture2,
   Captions,
   CircleDot,
   Timer as TimerIcon,
+  ChevronUp,
+  MoreVertical,
+  LayoutGrid,
+  PenTool,
+  Keyboard,
+  Camera,
+  Circle,
+  Square,
+  Clapperboard,
+  Speaker,
+  AudioLines,
+  ScanFace,
+  Droplets,
 } from 'lucide-react';
 import { WhiteboardStore } from '../rtc/whiteboard';
 import { PollStore, TimerStore, formatClock } from '../rtc/collab';
 import { CaptionsStore, captionsSupported, downloadBlob } from '../rtc/captions';
 import { CallRecorder, snapshotStage } from '../rtc/recorder';
 import { WhiteboardView } from './WhiteboardView';
-import { PollsPanel } from './PollsPanel';
+import { WatchStore } from '../rtc/watch';
+import { WatchView } from './WatchView';
+import { ActivitiesPanel, type ActivityView } from './ActivitiesPanel';
+import { SidePanel, type SideTab } from './SidePanel';
+import { Menu, type MenuSection } from './Menu';
+import { VideoTile } from './VideoTile';
+import { censor } from '../lib/censor';
+import { supportsSinkSelection } from './media';
 import type { ChatMessage, MeetingSession, SessionEvent } from '../rtc/MeetingSession';
 import type { LocalMedia } from '../rtc/LocalMedia';
 import { useNow } from '../lib/hooks';
@@ -44,7 +63,6 @@ import { AppearancePanel, AudioPanel, EffectsPanel, MeetingPanel, VideoPanel } f
 import { GhostDialog } from './GhostDialog';
 import { RemoteAudio } from './media';
 import { ParticipantsPanel } from './ParticipantsPanel';
-import { ToolsPanel } from './ToolsPanel';
 import { miniPlayerSupported, useMiniPlayer } from './MiniPlayer';
 import { ReactionLayer, ReactionPicker, type FloatingReaction } from './Reactions';
 import { copyText, useToast } from './Toast';
@@ -99,7 +117,9 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   const toast = useToast();
   const now = useNow(15000);
   const root = useRef<HTMLDivElement>(null);
-  const [panel, setPanel] = useState<'chat' | 'people' | 'tools' | 'polls' | null>(null);
+  const [panel, setPanel] = useState<SideTab | null>(null);
+  const [activityView, setActivityView] = useState<ActivityView>('home');
+  const [menu, setMenu] = useState<'more' | 'mic' | 'cam' | null>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [pinned, setPinned] = useState<string | null>(null);
   const [seenOthers, setSeenOthers] = useState(0);
@@ -118,7 +138,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   pttRef.current = ptt;
   const mini = useMiniPlayer(session, local, onLeave);
   const stageRef = useRef<HTMLElement>(null);
-  const [stageView, setStageView] = useState<'grid' | 'whiteboard'>('grid');
+  const [stageView, setStageView] = useState<'grid' | 'whiteboard' | 'watch'>('grid');
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [activity, setActivity] = useState<{ id: number; text: string; open: () => void } | null>(null);
   const [recStart, setRecStart] = useState(0);
@@ -126,20 +146,30 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
 
   // Collaboration stores live exactly as long as this call view (created in an effect so
   // React's dev double-render never makes duplicates that listen to the session).
-  const [stores, setStores] = useState<{ wb: WhiteboardStore; polls: PollStore; timer: TimerStore; captions: CaptionsStore } | null>(null);
+  const [stores, setStores] = useState<{ wb: WhiteboardStore; polls: PollStore; timer: TimerStore; captions: CaptionsStore; watch: WatchStore } | null>(null);
   useEffect(() => {
-    const st = { wb: new WhiteboardStore(session), polls: new PollStore(session), timer: new TimerStore(session), captions: new CaptionsStore(session, local) };
+    const st = { wb: new WhiteboardStore(session), polls: new PollStore(session), timer: new TimerStore(session), captions: new CaptionsStore(session, local), watch: new WatchStore(session) };
     setStores(st);
     const rerender = () => setTick((t) => t + 1);
-    const offs = [st.wb.subscribe(rerender), st.polls.subscribe(rerender), st.timer.subscribe(rerender), st.captions.subscribe(rerender)];
+    const offs = [st.wb.subscribe(rerender), st.polls.subscribe(rerender), st.timer.subscribe(rerender), st.captions.subscribe(rerender), st.watch.subscribe(rerender)];
     return () => {
       offs.forEach((o) => o());
       st.wb.dispose();
       st.polls.dispose();
       st.timer.dispose();
       st.captions.dispose();
+      st.watch.dispose();
     };
   }, [session, local]);
+
+  const openActivity = useCallback((v: ActivityView) => {
+    setActivityView(v);
+    setPanel('activities');
+  }, []);
+  // If the video gets stopped, leave the player view.
+  useEffect(() => {
+    if (stageView === 'watch' && stores && !stores.watch.src) setStageView('grid');
+  });
 
   const showActivity = useCallback((text: string, open: () => void) => {
     const id = Date.now();
@@ -151,7 +181,11 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
     if (!stores) return;
     stores.polls.onNewPoll = (p) => {
       sounds.message();
-      showActivity(`📊 ${p.byName} started a poll: ${p.question}`, () => setPanel('polls'));
+      showActivity(`📊 ${p.byName} started a poll: ${censor(p.question)}`, () => openActivity('polls'));
+    };
+    stores.watch.onRemoteLoad = (src, by) => {
+      setStageView('watch');
+      toast(`🎬 ${by} started watching: ${src.title}`);
     };
     stores.timer.onDone = () => {
       sounds.party();
@@ -587,6 +621,89 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
     setAudioBlocked(false);
   };
 
+  const mics = local.devices.filter((d) => d.kind === 'audioinput');
+  const speakers = local.devices.filter((d) => d.kind === 'audiooutput');
+  const cams = local.devices.filter((d) => d.kind === 'videoinput');
+  const fxOn = s.bgEffect !== 'none' || s.filter !== 'none' || s.lowLightBoost || s.autoFrame;
+
+  const micMenu: MenuSection[] = [
+    {
+      title: 'Microphone',
+      items: mics.map((d, i) => ({ label: d.label || `Microphone ${i + 1}`, checked: d.deviceId === local.micId, onClick: () => void local.switchMic(d.deviceId) })),
+    },
+    {
+      title: 'Speakers',
+      items: supportsSinkSelection()
+        ? speakers.map((d, i) => ({
+            label: d.label || `Speaker ${i + 1}`,
+            checked: d.deviceId === (s.speakerId || speakers[0]?.deviceId),
+            onClick: () => updateSettings({ speakerId: d.deviceId }),
+          }))
+        : [],
+    },
+    {
+      items: [
+        { label: 'Voice changer', icon: <AudioLines size={16} />, hint: s.voiceFx !== 'none' ? s.voiceFx : undefined, onClick: () => openActivity('voice'), testId: 'menu-voice' },
+        { label: 'Audio settings', icon: <Speaker size={16} />, onClick: () => setSettingsTab('audio'), testId: 'menu-audio-settings' },
+      ],
+    },
+  ];
+  const camMenu: MenuSection[] = [
+    {
+      title: 'Camera',
+      items: cams.map((d, i) => ({ label: d.label || `Camera ${i + 1}`, checked: d.deviceId === local.camId, onClick: () => void local.switchCam(d.deviceId) })),
+    },
+    {
+      title: 'Quick effects',
+      items: [
+        {
+          label: s.bgEffect === 'blur' ? 'Turn off blur' : 'Blur my background',
+          icon: <Droplets size={16} />,
+          onClick: () => updateSettings({ bgEffect: s.bgEffect === 'blur' ? 'none' : 'blur' }),
+          testId: 'menu-blur',
+        },
+        { label: s.autoFrame ? 'Turn off auto-framing' : 'Auto-framing', icon: <ScanFace size={16} />, onClick: () => updateSettings({ autoFrame: !s.autoFrame }) },
+        { label: 'Backgrounds & filters…', icon: <Sparkles size={16} />, hint: fxOn ? 'on' : undefined, onClick: () => setSettingsTab('effects'), testId: 'ctrl-effects' },
+        { label: 'Video settings', icon: <SettingsIcon size={16} />, onClick: () => setSettingsTab('video'), testId: 'menu-video-settings' },
+      ],
+    },
+  ];
+  const moreMenu: MenuSection[] = [
+    {
+      items: [
+        { label: 'Watch together', icon: <Clapperboard size={16} />, onClick: () => openActivity('watch'), testId: 'more-watch' },
+        { label: 'Whiteboard', icon: <PenTool size={16} />, onClick: () => setStageView('whiteboard'), testId: 'more-whiteboard' },
+        {
+          label: me.recording ? 'Stop recording' : 'Record call',
+          icon: me.recording ? <Square size={16} /> : <Circle size={16} />,
+          onClick: toggleRecording,
+          danger: me.recording,
+          testId: 'more-record',
+        },
+        { label: 'Group photo', icon: <Camera size={16} />, onClick: () => void groupPhoto(), testId: 'more-photo' },
+        ...(local.canShareScreen
+          ? [{ label: local.screen ? 'Stop presenting' : 'Present your screen', icon: <MonitorUp size={16} />, onClick: () => void toggleScreen(), className: 'show-xs' }]
+          : []),
+        ...(captionsSupported() ? [{ label: me.captions ? 'Turn off captions' : 'Live captions', icon: <Captions size={16} />, onClick: toggleCaptions, className: 'show-xs' }] : []),
+      ],
+    },
+    {
+      items: [
+        { label: 'Backgrounds & filters', icon: <Sparkles size={16} />, onClick: () => setSettingsTab('effects'), testId: 'more-effects' },
+        ...(miniPlayerSupported()
+          ? [{ label: mini.open ? 'Close mini player' : 'Mini player', icon: <PictureInPicture2 size={16} />, onClick: () => (mini.open ? mini.close() : void mini.openMini()), testId: 'ctrl-mini' }]
+          : []),
+        { label: isFullscreen ? 'Exit fullscreen' : 'Fullscreen', icon: isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />, onClick: toggleFullscreen, testId: 'ctrl-fullscreen' },
+      ],
+    },
+    {
+      items: [
+        { label: 'Keyboard shortcuts', icon: <Keyboard size={16} />, hint: '?', onClick: () => setShowShortcuts(true) },
+        { label: 'Settings', icon: <SettingsIcon size={16} />, onClick: () => setSettingsTab('audio'), testId: 'ctrl-settings' },
+      ],
+    },
+  ];
+
   const signalDown = snap.signal !== 'connected';
   const micOn = local.micOn && !!local.mic;
   const effectsOn = s.bgEffect !== 'none' || s.filter !== 'none' || s.lowLightBoost;
@@ -625,7 +742,6 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             data-testid="signal-status"
             data-status={snap.signal}
           />
-          {s.showClock && <span className="hide-sm muted">{new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>}
           <span className="count-chip" data-testid="participant-count">
             <Users size={14} /> {snap.participants.filter((p) => !p.leaving).length}
           </span>
@@ -657,7 +773,18 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
               </button>
             </div>
           )}
-          {stageView === 'whiteboard' && stores ? (
+          {stageView === 'watch' && stores?.watch.src ? (
+            <WatchView
+              store={stores.watch}
+              onClose={() => setStageView('grid')}
+              onChange={() => openActivity('watch')}
+              strip={snap.participants
+                .filter((p) => !p.leaving)
+                .map((p) => (
+                  <VideoTile key={p.id} tile={{ key: `${p.id}:cam`, kind: 'cam', p }} pinned={false} onPin={() => {}} mirrorSelf={s.mirrorSelf} showDetails={false} compact />
+                ))}
+            />
+          ) : stageView === 'whiteboard' && stores ? (
             <WhiteboardView store={stores.wb} onClose={() => setStageView('grid')} code={session.code} />
           ) : (
           <VideoGrid
@@ -677,7 +804,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             <div className="captions-overlay" data-testid="captions-overlay">
               {[...stores.captions.lines.values()].slice(-3).map((l) => (
                 <div key={l.speaker} className={`caption-line ${l.final ? '' : 'interim'}`}>
-                  <b>{l.speaker === session.selfId ? 'You' : l.name}:</b> {l.text}
+                  <b>{l.speaker === session.selfId ? 'You' : l.name}:</b> {censor(l.text)}
                 </div>
               ))}
             </div>
@@ -699,7 +826,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
               <span className="chat-preview-name">
                 <MessageSquare size={14} /> {preview.name}
               </span>
-              <span className="chat-preview-text">{preview.text}</span>
+              <span className="chat-preview-text">{censor(preview.text)}</span>
             </button>
           )}
           {ptt && (
@@ -708,136 +835,124 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             </div>
           )}
         </main>
-        {panel === 'chat' && <ChatPanel
-            messages={snap.messages}
-            onSend={onSend}
-            onClose={() => setPanel(null)}
-            disabled={false}
-            typers={Object.values(typers).map((t) => t.name)}
-            onTyping={() => session.sendTyping()}
-          />}
-        {panel === 'tools' && stores && (
-          <ToolsPanel
-            session={session}
-            local={local}
-            onClose={() => setPanel(null)}
-            onGhost={() => setGhostOpen(true)}
-            features={{
-              openWhiteboard: () => {
-                setStageView('whiteboard');
-                setPanel(null);
-              },
-              openPolls: () => setPanel('polls'),
-              timer: stores.timer,
-              captions: stores.captions,
-              captionsOn: me.captions,
-              toggleCaptions,
-              recording: me.recording,
-              recordStart: recStart,
-              toggleRecording,
-              groupPhoto: () => void groupPhoto(),
-            }}
-          />
-        )}
-        {panel === 'polls' && stores && (
-          <PollsPanel store={stores.polls} participants={snap.participants} selfId={session.selfId} onClose={() => setPanel(null)} />
-        )}
-        {panel === 'people' && (
-          <ParticipantsPanel participants={snap.participants.filter((p) => !p.leaving)} onClose={() => setPanel(null)} onCopyLink={() => void copyLink()} />
+        {panel && (
+          <SidePanel
+            tab={panel}
+            onTab={(t) => {
+              // Clicking Activities while on it goes back to the grid.
+              if (t === 'activities' && panel === 'activities') setActivityView('home');
+              setPanel(t);
+            }} onClose={() => setPanel(null)} counts={{ people: snap.participants.filter((p) => !p.leaving).length, unread }}>
+            {panel === 'people' && <ParticipantsPanel participants={snap.participants.filter((p) => !p.leaving)} onCopyLink={() => void copyLink()} />}
+            {panel === 'chat' && (
+              <ChatPanel
+                messages={snap.messages}
+                onSend={onSend}
+                disabled={false}
+                typers={Object.values(typers).map((t) => t.name)}
+                onTyping={() => session.sendTyping()}
+              />
+            )}
+            {panel === 'activities' && stores && (
+              <ActivitiesPanel
+                session={session}
+                local={local}
+                participants={snap.participants}
+                view={activityView}
+                onView={setActivityView}
+                features={{
+                  openWhiteboard: () => {
+                    setStageView('whiteboard');
+                    setPanel(null);
+                  },
+                  polls: stores.polls,
+                  timer: stores.timer,
+                  captions: stores.captions,
+                  captionsOn: me.captions,
+                  toggleCaptions,
+                  recording: me.recording,
+                  recordStart: recStart,
+                  toggleRecording,
+                  groupPhoto: () => void groupPhoto(),
+                  openGhost: () => setGhostOpen(true),
+                  watch: stores.watch,
+                  openWatch: () => setStageView('watch'),
+                }}
+              />
+            )}
+          </SidePanel>
         )}
       </div>
 
       <footer className="call-controls">
         <div className="controls-left hide-sm">
+          {s.showClock && <span className="muted">{new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>}
+          <span className="controls-sep" />
           <span className="mono muted">{session.code}</span>
         </div>
         <div className="controls-center">
-          <CtrlButton
-            icon={micOn ? <Mic size={22} /> : <MicOff size={22} />}
-            label={micOn ? 'Mute (Ctrl+D)' : 'Unmute (Ctrl+D)'}
-            off={!micOn}
-            onClick={() => void toggleMic()}
-            testId="ctrl-mic"
-          />
-          <CtrlButton
-            icon={local.camOn ? <Video size={22} /> : <VideoOff size={22} />}
-            label={local.camOn ? 'Turn camera off (Ctrl+E)' : 'Turn camera on (Ctrl+E)'}
-            off={!local.camOn}
-            onClick={() => void toggleCam()}
-            testId="ctrl-cam"
-          />
-          <CtrlButton
-            icon={<Sparkles size={22} />}
-            label="Backgrounds & filters"
-            active={effectsOn}
-            onClick={() => setSettingsTab('effects')}
-            testId="ctrl-effects"
-          />
-          {local.canShareScreen && (
-            <CtrlButton
-              icon={local.screen ? <MonitorOff size={22} /> : <MonitorUp size={22} />}
-              label={local.screen ? 'Stop presenting' : 'Present your screen'}
-              active={!!local.screen}
-              onClick={() => void toggleScreen()}
-              testId="ctrl-screen"
-              className="hide-xs"
-            />
-          )}
-          <div className="react-wrap">
-            <CtrlButton icon={<SmilePlus size={22} />} label="Send a reaction" active={picker} onClick={() => setPicker((v) => !v)} testId="ctrl-react" />
-            {picker && (
-              <ReactionPicker
-                onPick={(e) => {
-                  session.react(e);
-                }}
-                onClose={() => setPicker(false)}
+          <div className="ctrl-group">
+            <div className="ctrl-split">
+              <CtrlButton
+                icon={micOn ? <Mic size={22} /> : <MicOff size={22} />}
+                label={micOn ? 'Mute (Ctrl+D)' : 'Unmute (Ctrl+D)'}
+                off={!micOn}
+                onClick={() => void toggleMic()}
+                testId="ctrl-mic"
+              />
+              <button className={`ctrl-caret ${menu === 'mic' ? 'open' : ''}`} onClick={() => setMenu(menu === 'mic' ? null : 'mic')} aria-label="Audio options" title="Audio options" data-testid="ctrl-mic-menu">
+                <ChevronUp size={16} />
+              </button>
+              {menu === 'mic' && <Menu sections={micMenu} onClose={() => setMenu(null)} align="left" testId="mic-menu" anchorTestId="ctrl-mic-menu" />}
+            </div>
+            <div className="ctrl-split">
+              <CtrlButton
+                icon={local.camOn ? <Video size={22} /> : <VideoOff size={22} />}
+                label={local.camOn ? 'Turn camera off (Ctrl+E)' : 'Turn camera on (Ctrl+E)'}
+                off={!local.camOn}
+                onClick={() => void toggleCam()}
+                testId="ctrl-cam"
+              />
+              <button className={`ctrl-caret ${menu === 'cam' ? 'open' : ''} ${effectsOn ? 'fx' : ''}`} onClick={() => setMenu(menu === 'cam' ? null : 'cam')} aria-label="Video options" title="Video & effects" data-testid="ctrl-cam-menu">
+                <ChevronUp size={16} />
+              </button>
+              {menu === 'cam' && <Menu sections={camMenu} onClose={() => setMenu(null)} align="left" testId="cam-menu" anchorTestId="ctrl-cam-menu" />}
+            </div>
+          </div>
+          <div className="ctrl-group">
+            {captionsSupported() && (
+              <CtrlButton icon={<Captions size={22} />} label={me.captions ? 'Turn off captions' : 'Turn on live captions'} active={me.captions} onClick={toggleCaptions} testId="ctrl-cc" className="hide-xs" />
+            )}
+            <div className="react-wrap">
+              <CtrlButton icon={<SmilePlus size={22} />} label="Send a reaction" active={picker} onClick={() => setPicker((v) => !v)} testId="ctrl-react" />
+              {picker && <ReactionPicker onPick={(e) => session.react(e)} onClose={() => setPicker(false)} />}
+            </div>
+            <CtrlButton icon={<Hand size={22} />} label={session.hand ? 'Lower hand (Ctrl+Alt+H)' : 'Raise hand (Ctrl+Alt+H)'} active={me.hand} onClick={toggleHand} testId="ctrl-hand" />
+            {local.canShareScreen && (
+              <CtrlButton
+                icon={local.screen ? <MonitorOff size={22} /> : <MonitorUp size={22} />}
+                label={local.screen ? 'Stop presenting' : 'Present your screen'}
+                active={!!local.screen}
+                onClick={() => void toggleScreen()}
+                testId="ctrl-screen"
+                className="hide-xs"
               />
             )}
+            <div className="react-wrap">
+              <CtrlButton icon={<MoreVertical size={22} />} label="More options" active={menu === 'more'} onClick={() => setMenu(menu === 'more' ? null : 'more')} testId="ctrl-more" />
+              {menu === 'more' && <Menu sections={moreMenu} onClose={() => setMenu(null)} align="center" testId="more-menu" anchorTestId="ctrl-more" />}
+            </div>
           </div>
-          <CtrlButton
-            icon={<Hand size={22} />}
-            label={session.hand ? 'Lower hand (Ctrl+Alt+H)' : 'Raise hand (Ctrl+Alt+H)'}
-            active={me.hand}
-            onClick={toggleHand}
-            testId="ctrl-hand"
-          />
-          {captionsSupported() && (
-            <CtrlButton
-              icon={<Captions size={22} />}
-              label={me.captions ? 'Turn off captions' : 'Turn on live captions'}
-              active={me.captions}
-              onClick={toggleCaptions}
-              testId="ctrl-cc"
-            />
-          )}
-          <CtrlButton icon={<SettingsIcon size={22} />} label="Settings" onClick={() => setSettingsTab('audio')} testId="ctrl-settings" className="hide-xs" />
-          {miniPlayerSupported() && (
-            <CtrlButton
-              icon={<PictureInPicture2 size={22} />}
-              label={mini.open ? 'Close mini player' : 'Mini player'}
-              active={mini.open}
-              onClick={() => (mini.open ? mini.close() : void mini.openMini())}
-              className="hide-sm"
-              testId="ctrl-mini"
-            />
-          )}
-          <CtrlButton
-            icon={isFullscreen ? <Minimize size={22} /> : <Maximize size={22} />}
-            label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-            onClick={toggleFullscreen}
-            className="hide-sm"
-            testId="ctrl-fullscreen"
-          />
           <CtrlButton icon={<PhoneOff size={22} />} label="Leave call" danger onClick={onLeave} testId="ctrl-leave" />
         </div>
         <div className="controls-right">
           <CtrlButton
-            icon={<Wand2 size={22} />}
-            label="Tools: soundboard & fun"
-            text="Tools"
-            active={panel === 'tools'}
-            badge={local.playingSounds.size ? '♪' : undefined}
-            onClick={() => setPanel(panel === 'tools' ? null : 'tools')}
+            icon={<LayoutGrid size={22} />}
+            label="Activities: watch together, whiteboard, polls, soundboard…"
+            text="Activities"
+            active={panel === 'activities'}
+            badge={local.playingSounds.size ? '♪' : stores?.watch.src ? '▶' : undefined}
+            onClick={() => (panel === 'activities' ? setPanel(null) : openActivity(activityView))}
             testId="ctrl-tools"
           />
           <CtrlButton
@@ -873,7 +988,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
           <div className="tabs tabs-scroll" role="tablist">
             {(['audio', 'video', 'effects', 'appearance', 'meeting', 'general'] as const).map((t) => (
               <button key={t} role="tab" aria-selected={settingsTab === t} className={settingsTab === t ? 'active' : ''} onClick={() => setSettingsTab(t)}>
-                {t[0].toUpperCase() + t.slice(1)}
+                {{ audio: 'Audio', video: 'Video', effects: 'Backgrounds & filters', appearance: 'Appearance', meeting: 'Meetings', general: 'Profile' }[t]}
               </button>
             ))}
           </div>

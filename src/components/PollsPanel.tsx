@@ -1,20 +1,20 @@
 import { useState } from 'react';
-import { BarChart3, Check, Plus, Trash2, X } from 'lucide-react';
+import { BarChart3, Check, Plus, Trash2 } from 'lucide-react';
+import { censor } from '../lib/censor';
 import type { PollStore } from '../rtc/collab';
 import type { Participant } from '../rtc/MeetingSession';
 import { useEmitter } from '../lib/hooks';
 import { Toggle } from './controls';
 
-export function PollsPanel({
+/** Polls page (lives inside Activities). */
+export function PollsView({
   store,
   participants,
   selfId,
-  onClose,
 }: {
   store: PollStore;
   participants: Participant[];
   selfId: string;
-  onClose: () => void;
 }) {
   useEmitter(store);
   const [creating, setCreating] = useState(store.polls.length === 0);
@@ -33,14 +33,7 @@ export function PollsPanel({
   const valid = q.trim() && opts.filter((o) => o.trim()).length >= 2;
 
   return (
-    <aside className="side-panel" aria-label="Polls" data-testid="polls-panel">
-      <div className="side-head">
-        <h2>Polls</h2>
-        <button className="icon-btn ghost" onClick={onClose} aria-label="Close polls">
-          <X size={20} />
-        </button>
-      </div>
-      <div className="tools-scroll">
+    <div className="polls-view" data-testid="polls-panel">
         {creating ? (
           <div className="poll-form">
             <label className="field">
@@ -97,7 +90,7 @@ export function PollsPanel({
                 {p.anonymous && ' · anonymous'}
                 {p.ended && ' · ended'}
               </div>
-              <h3 className="poll-q">{p.question}</h3>
+              <h3 className="poll-q">{censor(p.question)}</h3>
               {p.options.map((o, i) => {
                 const pct = total ? Math.round((counts[i] / total) * 100) : 0;
                 return (
@@ -111,7 +104,7 @@ export function PollsPanel({
                   >
                     {showResults && <span className="poll-bar" style={{ width: `${pct}%` }} />}
                     <span className="poll-label">
-                      {mine === i && <Check size={14} />} {o}
+                      {mine === i && <Check size={14} />} {censor(o)}
                     </span>
                     {showResults && (
                       <span className="poll-count" data-testid={`poll-count-${i}`}>
@@ -129,7 +122,6 @@ export function PollsPanel({
             </div>
           );
         })}
-      </div>
-    </aside>
+    </div>
   );
 }

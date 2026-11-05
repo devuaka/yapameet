@@ -485,6 +485,13 @@ export function MeetingPanel() {
             ].map(([value, label]) => ({ value, label })),
           ]}
         />
+        <Toggle
+          label="Filter swear words"
+          hint="Shows f*** instead in chat, captions, polls and transcripts (only on your screen)"
+          checked={s.censorSwears}
+          onChange={(v) => updateSettings({ censorSwears: v })}
+          testId="censor-toggle"
+        />
         <Toggle label="Warn me when I talk while muted" checked={s.mutedWarning} onChange={(v) => updateSettings({ mutedWarning: v })} />
       </section>
       <section className="panel-section">

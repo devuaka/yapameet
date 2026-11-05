@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { SendHorizontal, Smile, X } from 'lucide-react';
+import { SendHorizontal, Smile } from 'lucide-react';
+import { censor } from '../lib/censor';
 import type { ChatMessage } from '../rtc/MeetingSession';
 import { formatTime } from '../lib/hooks';
 
@@ -8,7 +9,7 @@ const CHAT_EMOJIS = ['😀', '😂', '🥲', '😍', '😎', '🤔', '😮', '�
 const URL_RE = /(https?:\/\/[^\s<]+)/g;
 
 function Linkified({ text }: { text: string }) {
-  const parts = text.split(URL_RE);
+  const parts = censor(text).split(URL_RE);
   return (
     <>
       {parts.map((part, i) =>
@@ -27,14 +28,12 @@ function Linkified({ text }: { text: string }) {
 export function ChatPanel({
   messages,
   onSend,
-  onClose,
   disabled,
   typers = [],
   onTyping,
 }: {
   messages: ChatMessage[];
   onSend: (text: string) => void;
-  onClose: () => void;
   disabled: boolean;
   typers?: string[];
   onTyping?: () => void;
@@ -69,13 +68,7 @@ export function ChatPanel({
   };
 
   return (
-    <aside className="side-panel" aria-label="Chat">
-      <div className="side-head">
-        <h2>In-call messages</h2>
-        <button className="icon-btn ghost" onClick={onClose} aria-label="Close chat">
-          <X size={20} />
-        </button>
-      </div>
+    <div className="side-content" aria-label="Chat">
       <p className="side-note">Messages are only seen by people in the call and disappear when you leave.</p>
       <div
         className="chat-list"
@@ -161,6 +154,6 @@ export function ChatPanel({
           <SendHorizontal size={18} />
         </button>
       </div>
-    </aside>
+    </div>
   );
 }

@@ -72,6 +72,7 @@ export interface Settings {
   captionsLang: string;
   voiceFx: VoiceFx;
   autoFrame: boolean;
+  censorSwears: boolean;
   // secrets
   eggs: EggId[];
 }
@@ -114,6 +115,7 @@ export const defaultSettings: Settings = {
   captionsLang: '',
   voiceFx: 'none',
   autoFrame: false,
+  censorSwears: true,
   eggs: [],
 };
 

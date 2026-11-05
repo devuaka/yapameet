@@ -57,6 +57,9 @@ export class LocalMedia extends Emitter {
   private voiceChain: VoiceChain | null = null;
   private voiceFor = '';
   private voiceSeq = 0;
+  /** Play your own (possibly voice-changed) mic back to you. Not saved: avoids surprise echo next time. */
+  hearMyself = false;
+  private selfMonitor: MediaStreamAudioSourceNode | null = null;
   /** The camera track that is shown and sent (effects output, or the raw camera). */
   cam: MediaStreamTrack | null = null;
   /** The camera exactly as captured. */
@@ -301,6 +304,21 @@ export class LocalMedia extends Emitter {
     if (old && old !== track) old.stop();
   }
 
+  setHearMyself(on: boolean) {
+    this.hearMyself = on;
+    this.refreshSelfMonitor();
+    this.emit();
+  }
+
+  private refreshSelfMonitor() {
+    this.selfMonitor?.disconnect();
+    this.selfMonitor = null;
+    if (!this.hearMyself || !this.micOut) return;
+    const ctx = getAudioContext();
+    this.selfMonitor = ctx.createMediaStreamSource(new MediaStream([this.micOut]));
+    this.selfMonitor.connect(ctx.destination);
+  }
+
   /** Decide what to send for the mic: raw, or through the voice changer. */
   private async rebuildMicOutput() {
     const mic = this.mic;
@@ -328,6 +346,7 @@ export class LocalMedia extends Emitter {
     if (next !== this.micOut) {
       this.micOut = next;
       this.onTrack?.('mic', next);
+      this.refreshSelfMonitor();
     }
     old?.stop();
     this.emit();
@@ -563,6 +582,9 @@ export class LocalMedia extends Emitter {
     this.voiceChain = null;
     this.voiceFor = '';
     this.micOut = null;
+    this.hearMyself = false;
+    this.selfMonitor?.disconnect();
+    this.selfMonitor = null;
     for (const t of [this.mic, this.rawCam, this.cam, this.screen, this.screenAudio]) t?.stop();
     this.micMonitorStream?.getTracks().forEach((t) => t.stop());
     this.mic = this.cam = this.rawCam = this.screen = this.screenAudio = null;
