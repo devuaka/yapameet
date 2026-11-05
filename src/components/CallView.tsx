@@ -60,6 +60,7 @@ import { Logo } from './Brand';
 import { ChatPanel } from './ChatPanel';
 import { Modal, Toggle } from './controls';
 import { AppearancePanel, AudioPanel, EffectsPanel, MeetingPanel, VideoPanel } from './SettingsPanels';
+import { PfpEditor } from './PfpEditor';
 import { GhostDialog } from './GhostDialog';
 import { RemoteAudio } from './media';
 import { ParticipantsPanel } from './ParticipantsPanel';
@@ -851,6 +852,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
                 disabled={false}
                 typers={Object.values(typers).map((t) => t.name)}
                 onTyping={() => session.sendTyping()}
+                avatars={Object.fromEntries(snap.participants.map((p) => [p.id, p.pfp]))}
               />
             )}
             {panel === 'activities' && stores && (
@@ -999,6 +1001,10 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
           {settingsTab === 'meeting' && <MeetingPanel />}
           {settingsTab === 'general' && (
             <div className="device-panel">
+              <section className="panel-section">
+                <h3>Profile picture</h3>
+                <PfpEditor name={me.name} track={local.rawCam} />
+              </section>
               <section className="panel-section">
                 <label className="field">
                   <span>Display name</span>

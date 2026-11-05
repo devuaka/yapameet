@@ -3,6 +3,8 @@ import { Copy, Mic, MicOff, Settings as SettingsIcon, Sparkles, Video, VideoOff 
 import { BrandLink } from './Brand';
 import { Avatar, DeviceSelect, Modal } from './controls';
 import { AudioPanel, EffectsPanel, VideoPanel } from './SettingsPanels';
+import { PfpEditor } from './PfpEditor';
+import { usePfp } from '../lib/pfp';
 import { LevelMeter, VideoView } from './media';
 import { copyText, useToast } from './Toast';
 import type { LocalMedia } from '../rtc/LocalMedia';
@@ -29,7 +31,8 @@ export function PreJoin({
   const s = useSettings();
   const toast = useToast();
   const [name, setName] = useState(defaultName);
-  const [showSettings, setShowSettings] = useState<null | 'audio' | 'video' | 'effects'>(null);
+  const [showSettings, setShowSettings] = useState<null | 'audio' | 'video' | 'effects' | 'picture'>(null);
+  const pfp = usePfp();
   const mics = local.devices.filter((d) => d.kind === 'audioinput');
   const cams = local.devices.filter((d) => d.kind === 'videoinput');
 
@@ -69,7 +72,9 @@ export function PreJoin({
               <VideoView stream={local.camStream} mirror={s.mirrorSelf} testId="prejoin-video" />
             ) : (
               <div className="preview-off">
-                <Avatar name={name || 'You'} size={96} />
+                <button type="button" className="pfp-hit" onClick={() => setShowSettings('picture')} title="Change profile picture" data-testid="prejoin-pfp">
+                  <Avatar name={name || 'You'} size={96} src={pfp} />
+                </button>
                 <span className="muted">{local.camStarting ? 'Starting camera…' : 'Camera is off'}</span>
               </div>
             )}
@@ -165,15 +170,16 @@ export function PreJoin({
       {showSettings && (
         <Modal title="Settings" onClose={() => setShowSettings(null)} wide>
           <div className="tabs" role="tablist">
-            {(['audio', 'video', 'effects'] as const).map((t) => (
+            {(['audio', 'video', 'effects', 'picture'] as const).map((t) => (
               <button key={t} role="tab" aria-selected={showSettings === t} className={showSettings === t ? 'active' : ''} onClick={() => setShowSettings(t)}>
-                {t === 'effects' ? 'Backgrounds & filters' : t[0].toUpperCase() + t.slice(1)}
+                {t === 'effects' ? 'Backgrounds & filters' : t === 'picture' ? 'Profile picture' : t[0].toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
           {showSettings === 'audio' && <AudioPanel local={local} />}
           {showSettings === 'video' && <VideoPanel local={local} />}
           {showSettings === 'effects' && <EffectsPanel local={local} />}
+          {showSettings === 'picture' && <PfpEditor name={name} track={local.rawCam} />}
         </Modal>
       )}
     </div>

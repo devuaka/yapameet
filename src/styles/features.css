@@ -1861,3 +1861,117 @@ html.fx-flash body::before {
     display: none;
   }
 }
+
+/* ---------- profile pictures ---------- */
+.avatar-img {
+  object-fit: cover;
+  display: block;
+  padding: 0;
+}
+.chat-meta .avatar {
+  flex: none;
+  align-self: center;
+  box-shadow: none;
+}
+.chat-meta .avatar:not(.avatar-img) {
+  font-size: 10px !important;
+}
+.pfp-hit {
+  border: none;
+  background: none;
+  padding: 0;
+  border-radius: 50%;
+  position: relative;
+}
+.pfp-hit::after {
+  content: '\270E';
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.pfp-hit:hover::after,
+.pfp-hit:focus-visible::after {
+  opacity: 1;
+}
+.pfp-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pfp-current {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.pfp-cam {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 0 0 3px var(--accent);
+}
+.pfp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+.pfp-actions .btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.pfp-emoji {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.pfp-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+.pfp-emoji-grid button {
+  font-size: 22px;
+  padding: 4px 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+}
+.pfp-emoji-grid button:hover {
+  background: var(--surface-3);
+}
+.pfp-emoji-grid button.sel {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.pfp-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pfp-colors button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+}
+.pfp-colors button.sel {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+.pfp-emoji .btn {
+  align-self: flex-start;
+}

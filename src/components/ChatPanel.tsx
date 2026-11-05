@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { SendHorizontal, Smile } from 'lucide-react';
 import { censor } from '../lib/censor';
+import { Avatar } from './controls';
 import type { ChatMessage } from '../rtc/MeetingSession';
 import { formatTime } from '../lib/hooks';
 
@@ -31,7 +32,10 @@ export function ChatPanel({
   disabled,
   typers = [],
   onTyping,
+  avatars = {},
 }: {
+  /** sender id -> picture (or null for initials) */
+  avatars?: Record<string, string | null>;
   messages: ChatMessage[];
   onSend: (text: string) => void;
   disabled: boolean;
@@ -94,6 +98,7 @@ export function ChatPanel({
             <div key={m.id} className={`chat-msg ${m.isLocal ? 'mine' : ''} ${grouped ? 'grouped' : ''}`} data-testid="chat-msg">
               {!grouped && (
                 <div className="chat-meta">
+                  <Avatar name={m.name} size={22} src={avatars[m.from]} />
                   <span className="chat-name">{m.isLocal ? 'You' : m.name}</span>
                   <time>{formatTime(m.ts)}</time>
                 </div>

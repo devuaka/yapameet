@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Egg, Keyboard, Mic, Palette, RotateCcw, Sparkles, User, Video, Wifi } from 'lucide-react';
 import { SiteHeader } from '../components/Brand';
+import { PfpEditor } from '../components/PfpEditor';
 import { AppearancePanel, AudioPanel, EffectsPanel, MeetingPanel, SecretsPanel, VideoPanel } from '../components/SettingsPanels';
 import { useToast } from '../components/Toast';
 import { LocalMedia } from '../rtc/LocalMedia';
@@ -111,6 +112,10 @@ export function SettingsPage() {
                       data-testid="settings-name"
                     />
                   </label>
+                </section>
+                <section className="panel-section">
+                  <h3>Profile picture</h3>
+                  <PfpEditor name={s.displayName} />
                 </section>
                 <section className="panel-section">
                   <h3>Reset</h3>

@@ -94,7 +94,7 @@ export const VideoTile = memo(function VideoTile({
         />
       ) : !ghosting ? (
         <div className="tile-avatar">
-          <Avatar name={p.name} size={compact ? 48 : 84} />
+          <Avatar name={p.name} size={compact ? 48 : 84} src={p.pfp} />
         </div>
       ) : null}
 
@@ -103,7 +103,7 @@ export const VideoTile = memo(function VideoTile({
           <canvas ref={freeze} className={`ghost-freeze ${frozen ? 'fading' : ''}`} hidden={!showVideo} />
           {!showVideo && (
             <div className="tile-avatar ghost-freeze fading">
-              <Avatar name={p.name} size={compact ? 48 : 84} />
+              <Avatar name={p.name} size={compact ? 48 : 84} src={p.pfp} />
             </div>
           )}
         </>

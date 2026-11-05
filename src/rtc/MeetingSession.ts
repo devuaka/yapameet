@@ -4,6 +4,7 @@ import { randomId } from '../lib/crypto';
 import { Emitter } from '../lib/emitter';
 import { getClientId, getSettings, subscribeSettings } from '../lib/settings';
 import { sounds } from '../lib/sounds';
+import { getPfp, isValidPfp, subscribePfp } from '../lib/pfp';
 import { SignalingChannel } from '../signaling/SignalingChannel';
 import type { FxKind, PeerInfo, SignalMessage, TransportStatus } from '../signaling/types';
 import type { LocalMedia, TrackSlot } from './LocalMedia';
@@ -47,6 +48,8 @@ export interface Participant {
   /** Set while a ghost-mode participant is fading out after leaving. */
   leaving: boolean;
   roomPhoto: string | null;
+  /** Profile picture (small data URL) or null for the initials avatar. */
+  pfp: string | null;
 }
 
 export interface ChatMessage {
@@ -133,6 +136,7 @@ class PeerLink {
   attempts = 0;
   lastRestartRequest = 0;
   roomPhoto: string | null = null;
+  pfp: string | null = null;
   leaving = false;
   queue: Promise<void> = Promise.resolve();
 
@@ -163,6 +167,8 @@ export class MeetingSession extends Emitter {
   private lastInfoJson = '';
   private unsubLocal: (() => void) | null = null;
   private unsubSettings: (() => void) | null = null;
+  private unsubPfp: (() => void) | null = null;
+  private offPfpEvents: (() => void) | null = null;
   private snapshot: SessionSnapshot;
   private eventListeners = new Set<(e: SessionEvent) => void>();
   private lastQuality = getSettings().videoQuality + getSettings().lowLatency;
@@ -209,6 +215,22 @@ export class MeetingSession extends Emitter {
     this.local.ensureMixer();
     this.unsubLocal = this.local.subscribe(this.onLocalChange);
     this.unsubSettings = subscribeSettings(this.onSettingsChange);
+    // Profile pictures travel peer-to-peer: to each person when their connection opens, and to everyone on change.
+    this.unsubPfp = subscribePfp(() => {
+      this.sendApp('pfp', getPfp());
+      this.emit();
+    });
+    this.offPfpEvents = this.onEvent((e) => {
+      if (e.type === 'peer-ready') {
+        const mine = getPfp();
+        if (mine) this.sendApp('pfp', mine, e.from);
+      } else if (e.type === 'app' && e.kind === 'pfp') {
+        const link = this.links.get(e.from);
+        if (!link) return;
+        link.pfp = isValidPfp(e.data) ? e.data : null;
+        this.emit();
+      }
+    });
     (window as unknown as { __yapameet?: MeetingSession }).__yapameet = this;
 
     this.signal.onMessage = this.onSignal;
@@ -250,6 +272,9 @@ export class MeetingSession extends Emitter {
     this.signal.close();
     this.unsubLocal?.();
     this.unsubSettings?.();
+    this.unsubPfp?.();
+    this.offPfpEvents?.();
+    this.unsubPfp = this.offPfpEvents = null;
     this.unsubLocal = this.unsubSettings = null;
     if (this.local.onTrack === this.onLocalTrack) this.local.onTrack = null;
     const w = window as unknown as { __yapameet?: MeetingSession };
@@ -990,6 +1015,7 @@ export class MeetingSession extends Emitter {
       joinedAt: this.joinedAt,
       leaving: false,
       roomPhoto: this.roomPhoto,
+      pfp: getPfp(),
     };
     const others: Participant[] = [...this.links.values()]
       .sort((a, b) => a.joinedAt - b.joinedAt)
@@ -1015,6 +1041,7 @@ export class MeetingSession extends Emitter {
         joinedAt: l.joinedAt,
         leaving: l.leaving,
         roomPhoto: l.roomPhoto,
+        pfp: l.pfp,
       }));
     return {
       left: this.left,

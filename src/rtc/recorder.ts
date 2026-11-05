@@ -50,6 +50,15 @@ function drawStage(stage: HTMLElement, g: CanvasRenderingContext2D, W: number, H
       g.globalAlpha = Number(getComputedStyle(frozen).opacity) || 0;
       g.drawImage(frozen, x, y, w, h);
       g.globalAlpha = 1;
+    } else if (!img && tile.querySelector<HTMLImageElement>('img.avatar-img')?.complete) {
+      const pic = tile.querySelector<HTMLImageElement>('img.avatar-img')!;
+      const rad = Math.min(w, h) * 0.2;
+      g.save();
+      g.beginPath();
+      g.arc(x + w / 2, y + h / 2, rad, 0, Math.PI * 2);
+      g.clip();
+      g.drawImage(pic, x + w / 2 - rad, y + h / 2 - rad, rad * 2, rad * 2);
+      g.restore();
     } else if (!img) {
       const avatar = tile.querySelector<HTMLElement>('.avatar');
       const rad = Math.min(w, h) * 0.18;

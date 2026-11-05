@@ -985,6 +985,65 @@ async function main() {
       return `B saw "${shown.split('\n').pop()}"`;
     });
 
+    await step('Profile pictures: A sets an emoji picture; B sees it on the tile (camera off), in People and in chat', async () => {
+      await openSettings(A.page);
+      await A.page.getByRole('tab', { name: 'Profile' }).click();
+      await A.page.locator('[data-testid="pfp-emoji-mode"]').click();
+      await A.page.locator('[data-testid="pfp-emoji-save"]').click();
+      await A.page.keyboard.press('Escape');
+      await A.page.locator('[data-testid="ctrl-cam"]').click();
+      const src = await until(
+        () => B.page.locator('[data-testid="tile-remote-cam"] img.avatar-img').getAttribute('src').catch(() => null),
+        { what: 'picture on B tile', timeout: 10000 },
+      );
+      if (!src.startsWith('data:image/')) throw new Error('unexpected picture ' + src.slice(0, 30));
+      await B.page.locator('[data-testid="ctrl-people"]').click();
+      await until(() => B.page.locator('[data-testid="participant-row"] img.avatar-img').count(), { what: 'picture in People on B' });
+      if (!(await A.page.locator('[data-testid="chat-input"]').count())) await A.page.locator('[data-testid="ctrl-chat"]').click();
+      await A.page.locator('[data-testid="chat-input"]').fill('picture check');
+      await A.page.locator('[data-testid="chat-input"]').press('Enter');
+      await B.page.locator('[data-testid="side-tab-chat"]').click();
+      // Messages are grouped per sender; the picture sits at the start of each group.
+      await until(() => B.page.locator('[data-testid="chat-msg"] .chat-meta img.avatar-img').count(), { what: 'picture next to chat messages on B' });
+      await closeSide(A.page);
+      await closeSide(B.page);
+      return `${Math.round(src.length / 1024)} KB picture delivered peer-to-peer`;
+    });
+
+    await step('Profile pictures: upload a photo, then remove it (B falls back to initials)', async () => {
+      const png = Buffer.from(
+        await A.page.evaluate(() => {
+          const cv = document.createElement('canvas');
+          cv.width = cv.height = 64;
+          const g = cv.getContext('2d');
+          g.fillStyle = '#e11d48';
+          g.fillRect(0, 0, 64, 64);
+          g.fillStyle = '#fde047';
+          g.fillRect(16, 16, 32, 32);
+          return cv.toDataURL('image/png').split(',')[1];
+        }),
+        'base64',
+      );
+      try {
+      await openSettings(A.page);
+      await A.page.getByRole('tab', { name: 'Profile' }).click();
+      await A.page.locator('[data-testid="pfp-file"]').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: png });
+      await until(async () => ((await B.page.locator('[data-testid="tile-remote-cam"] img.avatar-img').getAttribute('src').catch(() => '')) || '').startsWith('data:image/jpeg'), {
+        what: 'uploaded photo on B',
+      });
+      await A.page.locator('[data-testid="pfp-remove"]').click();
+      await until(async () => (await B.page.locator('[data-testid="tile-remote-cam"] img.avatar-img').count()) === 0, { what: 'initials on B after remove' });
+      await A.page.locator('[data-testid="pfp-emoji-mode"]').click();
+      await A.page.locator('[data-testid="pfp-emoji-save"]').click();
+      } finally {
+        // Always leave A with the dialog closed and the camera on, so later tests aren't affected.
+        await A.page.keyboard.press('Escape');
+        if ((await A.page.locator('[data-testid="ctrl-cam"]').getAttribute('aria-label')).includes('on')) await A.page.locator('[data-testid="ctrl-cam"]').click();
+        await until(() => remoteVideoPlaying(B.page), { what: 'camera back on' });
+      }
+      return 'upload (JPEG) and remove both reached B';
+    });
+
     await step('Leave: A sees B leave quickly; Rejoin reconnects', async () => {
       const t0 = Date.now();
       await B.page.locator('[data-testid="ctrl-leave"]').click();
@@ -1007,6 +1066,14 @@ async function main() {
       }, { what: 'board snapshot on rejoined B' });
       await B.page.locator('[data-testid="wb-close"]').click();
       return `${n} ink samples restored`;
+    });
+
+    await step('Profile pictures: a rejoining person receives existing pictures', async () => {
+      const got = await until(
+        () => B.page.evaluate(() => window.__yapameet.getSnapshot().participants.slice(1).some((p) => p.pfp && p.pfp.startsWith('data:image/'))),
+        { what: "A's picture on rejoined B" },
+      );
+      return got ? 'delivered on reconnect' : '';
     });
 
     await step('Reload: B refreshes the tab; A replaces the old connection (no duplicate)', async () => {

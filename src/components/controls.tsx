@@ -105,7 +105,10 @@ export function Modal({
   );
 }
 
-export function Avatar({ name, size = 72 }: { name: string; size?: number }) {
+export function Avatar({ name, size = 72, src }: { name: string; size?: number; src?: string | null }) {
+  if (src) {
+    return <img className="avatar avatar-img" src={src} alt={name} width={size} height={size} style={{ width: size, height: size }} draggable={false} />;
+  }
   const initials =
     name
       .split(/\s+/)
