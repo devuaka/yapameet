@@ -8,7 +8,7 @@ const COLORS = ['#111827', '#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6'
 const SIZES = [3, 6, 12];
 const BOARD_BG = '#fbfbfd';
 
-export function WhiteboardView({ store, onClose, code }: { store: WhiteboardStore; onClose: () => void; code: string }) {
+export function WhiteboardView({ store, onClose, code, readOnly, banner }: { store: WhiteboardStore; onClose: () => void; code: string; readOnly?: boolean; banner?: React.ReactNode }) {
   useEmitter(store);
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -55,7 +55,7 @@ export function WhiteboardView({ store, onClose, code }: { store: WhiteboardStor
   };
 
   const down = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || readOnly) return;
     try {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     } catch {
@@ -96,7 +96,8 @@ export function WhiteboardView({ store, onClose, code }: { store: WhiteboardStor
 
   return (
     <div className="wb" data-testid="whiteboard">
-      <div className="wb-toolbar">
+      {banner}
+      <div className={`wb-toolbar ${readOnly ? 'wb-readonly' : ''}`}>
         <div className="wb-group">
           <button className={tool === 'pen' ? 'sel' : ''} onClick={() => setTool('pen')} title="Pen" aria-label="Pen">
             <Pencil size={18} />
@@ -148,7 +149,7 @@ export function WhiteboardView({ store, onClose, code }: { store: WhiteboardStor
         <canvas
           ref={canvas}
           className="wb-canvas"
-          style={{ width: box.w, height: box.h, cursor: tool === 'eraser' ? 'cell' : 'crosshair' }}
+          style={{ width: box.w, height: box.h, cursor: readOnly ? 'default' : tool === 'eraser' ? 'cell' : 'crosshair' }}
           onPointerDown={down}
           onPointerMove={move}
           onPointerUp={up}

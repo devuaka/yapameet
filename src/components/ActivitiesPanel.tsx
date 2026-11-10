@@ -12,6 +12,7 @@ import {
   FileText,
   Ghost,
   Music4,
+  Gamepad2,
   Headphones,
   Clapperboard,
   Link2,
@@ -48,11 +49,13 @@ import {
   type SoundItem,
 } from '../lib/soundboard';
 import { PollsView } from './PollsPanel';
+import { GamesView } from './GameUI';
+import type { DrawGuessStore, FunStore } from '../rtc/games';
 import { Toggle } from './controls';
 import { parseWatchUrl, type WatchStore } from '../rtc/watch';
 import { useToast } from './Toast';
 
-export type ActivityView = 'home' | 'watch' | 'polls' | 'timer' | 'captions' | 'soundboard' | 'voice' | 'capture' | 'fun';
+export type ActivityView = 'home' | 'games' | 'watch' | 'polls' | 'timer' | 'captions' | 'soundboard' | 'voice' | 'capture' | 'fun';
 
 export interface ActivityFeatures {
   openWhiteboard: () => void;
@@ -68,9 +71,12 @@ export interface ActivityFeatures {
   openGhost: () => void;
   watch: WatchStore;
   openWatch: () => void;
+  dg: DrawGuessStore;
+  fun: FunStore;
 }
 
 const TITLES: Record<Exclude<ActivityView, 'home'>, string> = {
+  games: 'Games',
   watch: 'Watch together',
   polls: 'Polls',
   timer: 'Timer',
@@ -101,6 +107,7 @@ export function ActivitiesPanel({
   useEmitter(features.captions);
   useEmitter(features.polls);
   useEmitter(features.watch);
+  useEmitter(features.dg);
   useEmitter(local);
   const s = useSettings();
   const now = useNow(500);
@@ -121,6 +128,7 @@ export function ActivitiesPanel({
           {view === 'soundboard' && <SoundboardView local={local} />}
           {view === 'voice' && <VoiceView local={local} />}
           {view === 'watch' && <WatchPage features={features} />}
+          {view === 'games' && <GamesView dg={features.dg} fun={features.fun} polls={features.polls} participants={participants} />}
           {view === 'capture' && <CaptureView features={features} now={now} />}
           {view === 'fun' && <FunView session={session} features={features} />}
         </div>
@@ -131,6 +139,13 @@ export function ActivitiesPanel({
   const openPolls = features.polls.polls.filter((p) => !p.ended).length;
   const voice = VOICES.find((v) => v.id === s.voiceFx);
   const tiles: { id: ActivityView | 'whiteboard'; title: string; sub: string; icon: ReactNode; status?: string; tone?: string }[] = [
+    {
+      id: 'games',
+      title: 'Games',
+      sub: 'Draw & Guess, wheel, RPS, Would You Rather',
+      icon: <Gamepad2 size={22} />,
+      status: features.dg.active ? `Round ${features.dg.round}/${features.dg.total}` : undefined,
+    },
     {
       id: 'watch',
       title: 'Watch together',

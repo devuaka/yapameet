@@ -1,7 +1,8 @@
 /**
- * Soundboard library: built-in sounds are synthesized (original, no samples to
+ * Soundboard library: built-ins are real recordings in public/sfx (Mixkit free
  * license); uploads (MP3/WAV/OGG/M4A) are stored in IndexedDB on this device.
  */
+import { loadSfx } from './sounds';
 export interface SoundItem {
   id: string;
   name: string;
@@ -19,203 +20,20 @@ export const MAX_SOUND_SECONDS = 30;
 
 // ---------------------------------------------------------------- built-ins
 
-type Synth = (ctx: OfflineAudioContext) => void;
-const SR = 48000;
-
-function noiseBuffer(ctx: BaseAudioContext, seconds: number) {
-  const b = ctx.createBuffer(1, Math.ceil(seconds * ctx.sampleRate), ctx.sampleRate);
-  const d = b.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  return b;
-}
-
-function tone(ctx: BaseAudioContext, out: AudioNode, type: OscillatorType, freq: number, t: number, dur: number, vol: number, endFreq?: number) {
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.type = type;
-  o.frequency.setValueAtTime(freq, t);
-  if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
-  g.gain.setValueAtTime(0, t);
-  g.gain.linearRampToValueAtTime(vol, t + 0.01);
-  g.gain.setValueAtTime(vol, t + dur * 0.7);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(out);
-  o.start(t);
-  o.stop(t + dur + 0.02);
-  return o;
-}
-
-function hit(ctx: BaseAudioContext, out: AudioNode, t: number, freq: number, vol: number) {
-  tone(ctx, out, 'sine', freq, t, 0.22, vol, freq * 0.35);
-}
-
-function cymbal(ctx: BaseAudioContext, out: AudioNode, t: number, dur: number, vol: number) {
-  const src = ctx.createBufferSource();
-  src.buffer = noiseBuffer(ctx, dur);
-  const hp = ctx.createBiquadFilter();
-  hp.type = 'highpass';
-  hp.frequency.value = 6000;
-  const g = ctx.createGain();
-  g.gain.setValueAtTime(vol, t);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  src.connect(hp).connect(g).connect(out);
-  src.start(t);
-}
-
-const BUILTINS: (SoundItem & { secs: number; synth: Synth })[] = [
-  {
-    id: 'builtin:tada',
-    name: 'Ta-da!',
-    emoji: '🎺',
-    builtin: true,
-    secs: 1.6,
-    synth(ctx) {
-      const lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.frequency.value = 2800;
-      lp.connect(ctx.destination);
-      tone(ctx, lp, 'sawtooth', 523, 0, 0.14, 0.18);
-      tone(ctx, lp, 'sawtooth', 659, 0.12, 0.14, 0.18);
-      for (const f of [523, 659, 784, 1047]) tone(ctx, lp, 'sawtooth', f, 0.3, 1.2, 0.12);
-      cymbal(ctx, ctx.destination, 0.3, 1.1, 0.15);
-    },
-  },
-  {
-    id: 'builtin:badumtss',
-    name: 'Ba-dum-tss',
-    emoji: '🥁',
-    builtin: true,
-    secs: 1.5,
-    synth(ctx) {
-      hit(ctx, ctx.destination, 0, 180, 0.9);
-      hit(ctx, ctx.destination, 0.22, 140, 0.9);
-      cymbal(ctx, ctx.destination, 0.46, 1.0, 0.35);
-    },
-  },
-  {
-    id: 'builtin:sad',
-    name: 'Sad trombone',
-    emoji: '😢',
-    builtin: true,
-    secs: 2.6,
-    synth(ctx) {
-      const lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.frequency.value = 1400;
-      lp.connect(ctx.destination);
-      const notes: [number, number, number][] = [
-        [294, 0, 0.45],
-        [277, 0.5, 0.45],
-        [262, 1.0, 0.45],
-      ];
-      for (const [f, t, d] of notes) tone(ctx, lp, 'sawtooth', f, t, d, 0.22);
-      const o = tone(ctx, lp, 'sawtooth', 247, 1.5, 1.0, 0.22, 233);
-      const lfo = ctx.createOscillator();
-      const lg = ctx.createGain();
-      lfo.frequency.value = 6;
-      lg.gain.value = 8;
-      lfo.connect(lg).connect(o.frequency);
-      lfo.start(1.5);
-      lfo.stop(2.55);
-    },
-  },
-  {
-    id: 'builtin:airhorn',
-    name: 'Air horn',
-    emoji: '📯',
-    builtin: true,
-    secs: 1.7,
-    synth(ctx) {
-      const comp = ctx.createDynamicsCompressor();
-      comp.connect(ctx.destination);
-      for (const [t, d] of [
-        [0, 0.28],
-        [0.34, 0.28],
-        [0.68, 0.9],
-      ]) {
-        for (const f of [466, 470, 932]) tone(ctx, comp, 'sawtooth', f, t, d, 0.12);
-      }
-    },
-  },
-  {
-    id: 'builtin:crickets',
-    name: 'Crickets',
-    emoji: '🦗',
-    builtin: true,
-    secs: 3,
-    synth(ctx) {
-      for (let c = 0; c < 4; c++) {
-        const t0 = c * 0.75 + 0.05;
-        for (let i = 0; i < 3; i++) tone(ctx, ctx.destination, 'sine', 4600, t0 + i * 0.07, 0.05, 0.12);
-      }
-    },
-  },
-  {
-    id: 'builtin:boing',
-    name: 'Boing',
-    emoji: '🤸',
-    builtin: true,
-    secs: 1,
-    synth(ctx) {
-      const o = tone(ctx, ctx.destination, 'triangle', 180, 0, 0.9, 0.4, 520);
-      const lfo = ctx.createOscillator();
-      const lg = ctx.createGain();
-      lfo.frequency.value = 14;
-      lg.gain.value = 60;
-      lfo.connect(lg).connect(o.frequency);
-      lfo.start(0);
-      lfo.stop(0.9);
-    },
-  },
-  {
-    id: 'builtin:applause',
-    name: 'Applause',
-    emoji: '👏',
-    builtin: true,
-    secs: 3,
-    synth(ctx) {
-      const bp = ctx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.value = 1800;
-      bp.Q.value = 0.6;
-      bp.connect(ctx.destination);
-      for (let i = 0; i < 160; i++) {
-        const t = Math.random() * 2.6;
-        const src = ctx.createBufferSource();
-        src.buffer = noiseBuffer(ctx, 0.05);
-        const g = ctx.createGain();
-        const env = Math.min(1, t / 0.4) * Math.min(1, (3 - t) / 0.8);
-        g.gain.setValueAtTime(0.5 * env * (0.4 + Math.random() * 0.6), t);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-        src.connect(g).connect(bp);
-        src.start(t);
-      }
-    },
-  },
-  {
-    id: 'builtin:drumroll',
-    name: 'Drum roll',
-    emoji: '🪘',
-    builtin: true,
-    secs: 3,
-    synth(ctx) {
-      const bp = ctx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.value = 2500;
-      bp.connect(ctx.destination);
-      for (let t = 0; t < 2.2; t += 0.035) {
-        const src = ctx.createBufferSource();
-        src.buffer = noiseBuffer(ctx, 0.04);
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0.15 + (t / 2.2) * 0.45, t);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
-        src.connect(g).connect(bp);
-        src.start(t);
-      }
-      hit(ctx, ctx.destination, 2.25, 120, 1);
-      cymbal(ctx, ctx.destination, 2.25, 0.75, 0.4);
-    },
-  },
+/** Real recordings in public/sfx (Mixkit free license). maxSec trims long ones. */
+const BUILTINS: (SoundItem & { file: string; maxSec?: number })[] = [
+  { id: 'builtin:fanfare', name: 'Fanfare', emoji: '🎺', builtin: true, file: 'sb-fanfare' },
+  { id: 'builtin:badumtss', name: 'Ba-dum-tss', emoji: '🥁', builtin: true, file: 'sb-badumtss' },
+  { id: 'builtin:sad', name: 'Sad trombone', emoji: '😢', builtin: true, file: 'sb-sadtrombone' },
+  { id: 'builtin:partyhorn', name: 'Party horn', emoji: '🎉', builtin: true, file: 'sb-partyhorn' },
+  { id: 'builtin:crickets', name: 'Crickets', emoji: '🦗', builtin: true, file: 'sb-crickets', maxSec: 4 },
+  { id: 'builtin:boing', name: 'Boing', emoji: '🤸', builtin: true, file: 'sb-boing' },
+  { id: 'builtin:applause', name: 'Applause', emoji: '👏', builtin: true, file: 'sb-applause' },
+  { id: 'builtin:laugh', name: 'Laugh track', emoji: '😂', builtin: true, file: 'sb-laugh' },
+  { id: 'builtin:drumroll', name: 'Drum roll', emoji: '🪘', builtin: true, file: 'sb-drumroll' },
+  { id: 'builtin:clownhorn', name: 'Clown horn', emoji: '🤡', builtin: true, file: 'sb-clownhorn' },
+  { id: 'builtin:kiss', name: 'Kiss', emoji: '😘', builtin: true, file: 'sb-kiss' },
+  { id: 'builtin:gameover', name: 'Game over', emoji: '👾', builtin: true, file: 'sb-gameover' },
 ];
 
 export const BUILTIN_SOUNDS: SoundItem[] = BUILTINS.map(({ id, name, emoji, builtin }) => ({ id, name, emoji, builtin }));
@@ -301,11 +119,7 @@ export function getSoundBuffer(id: string, ctx: BaseAudioContext): Promise<Audio
   if (!p) {
     p = (async () => {
       const b = BUILTINS.find((x) => x.id === id);
-      if (b) {
-        const off = new OfflineAudioContext(1, Math.ceil(b.secs * SR), SR);
-        b.synth(off);
-        return off.startRendering();
-      }
+      if (b) return loadSfx(b.file, b.maxSec ?? 0);
       const item = await tx<StoredSound | undefined>('readonly', (s) => s.get(id));
       if (!item) return null;
       return ctx.decodeAudioData(await item.blob.arrayBuffer());

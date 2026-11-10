@@ -1,6 +1,7 @@
 import type { ImageSegmenter } from '@mediapipe/tasks-vision';
 import type { BgEffect, FilterId } from '../lib/settings';
 import { loadBackground } from '../lib/backgrounds';
+import { StickerTracker, type StickerId } from './faceStickers';
 
 /**
  * Camera effects: background blur / replacement (MediaPipe selfie segmentation,
@@ -35,9 +36,11 @@ export interface EffectOptions {
   lowLight: boolean;
   /** Keep the person centered (zooms in and follows, using the segmentation mask). */
   autoFrame: boolean;
+  /** Face sticker drawn on tracked faces. */
+  sticker: StickerId;
 }
 
-export const effectsNeeded = (o: EffectOptions) => o.bg !== 'none' || o.filter !== 'none' || o.lowLight || o.autoFrame;
+export const effectsNeeded = (o: EffectOptions) => o.bg !== 'none' || o.filter !== 'none' || o.lowLight || o.autoFrame || o.sticker !== 'none';
 
 export function cssFilterFor(o: Pick<EffectOptions, 'filter' | 'lowLight'>) {
   const parts = [o.filter !== 'none' ? FILTERS[o.filter].css : '', o.lowLight ? LOW_LIGHT : ''].filter(Boolean);
@@ -135,6 +138,9 @@ export class EffectsPipeline {
   private h = 0;
   /** Current auto-framing crop (0..1 of the frame), eased toward the target. */
   private crop = { x: 0, y: 0, s: 1 };
+  private stickers = new StickerTracker();
+  private faceSmall: Canvas = makeCanvas(320, 180);
+  private faceSmallCtx = ctx2d(this.faceSmall);
   private cleanup: () => void = () => {};
 
   constructor(
@@ -154,6 +160,10 @@ export class EffectsPipeline {
   setOptions(opts: EffectOptions) {
     this.opts = opts;
     void this.prepare();
+  }
+
+  get stickersReady() {
+    return this.stickers.ready;
   }
 
   get segmenterReady() {
@@ -301,6 +311,19 @@ export class EffectsPipeline {
       }
     } else {
       target.drawImage(src, 0, 0, w, h);
+    }
+
+    if (o.sticker !== 'none') {
+      // Track on a small copy (fast), draw at full size onto the composited frame.
+      const fw = 320;
+      const fh = Math.max(2, Math.round((fw * h) / w));
+      if (this.faceSmall.width !== fw || this.faceSmall.height !== fh) {
+        this.faceSmall.width = fw;
+        this.faceSmall.height = fh;
+      }
+      this.faceSmallCtx.drawImage(src, 0, 0, fw, fh);
+      this.stickers.update(this.faceSmall, w, h);
+      this.stickers.draw(target, o.sticker);
     }
 
     if (post) {

@@ -41,7 +41,9 @@ export function VideoGrid({
   activeSpeaker,
   hideSelf,
   compact,
+  onThrow,
 }: {
+  onThrow?: (target: string, item: import('../rtc/games').ThrowId) => void;
   participants: Participant[];
   pinned: string | null;
   onPin: (key: string | null) => void;
@@ -72,7 +74,7 @@ export function VideoGrid({
 
   const gap = compact ? 4 : 10;
   const [ref, size] = useSize<HTMLDivElement>();
-  const common = { onPin, mirrorSelf, showDetails };
+  const common = { onPin, mirrorSelf, showDetails, onThrow };
 
   if (spotlight && tiles.length > 1) {
     const rest = tiles.filter((t) => t !== spotlight);

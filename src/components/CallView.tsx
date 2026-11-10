@@ -68,6 +68,8 @@ import { miniPlayerSupported, useMiniPlayer } from './MiniPlayer';
 import { ReactionLayer, ReactionPicker, type FloatingReaction } from './Reactions';
 import { copyText, useToast } from './Toast';
 import { VideoGrid } from './VideoGrid';
+import { DrawGuessStore, FunStore, RPS_EMOJI, type RpsChoice } from '../rtc/games';
+import { DrawGuessBanner, RpsPrompt, SpinOverlay, ThrowLayer } from './GameUI';
 
 type SettingsTab = 'audio' | 'video' | 'effects' | 'appearance' | 'meeting' | 'general';
 
@@ -147,12 +149,20 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
 
   // Collaboration stores live exactly as long as this call view (created in an effect so
   // React's dev double-render never makes duplicates that listen to the session).
-  const [stores, setStores] = useState<{ wb: WhiteboardStore; polls: PollStore; timer: TimerStore; captions: CaptionsStore; watch: WatchStore } | null>(null);
+  const [stores, setStores] = useState<{
+    wb: WhiteboardStore;
+    polls: PollStore;
+    timer: TimerStore;
+    captions: CaptionsStore;
+    watch: WatchStore;
+    dg: DrawGuessStore;
+    fun: FunStore;
+  } | null>(null);
   useEffect(() => {
-    const st = { wb: new WhiteboardStore(session), polls: new PollStore(session), timer: new TimerStore(session), captions: new CaptionsStore(session, local), watch: new WatchStore(session) };
+    const st = { wb: new WhiteboardStore(session), polls: new PollStore(session), timer: new TimerStore(session), captions: new CaptionsStore(session, local), watch: new WatchStore(session), dg: new DrawGuessStore(session), fun: new FunStore(session) };
     setStores(st);
     const rerender = () => setTick((t) => t + 1);
-    const offs = [st.wb.subscribe(rerender), st.polls.subscribe(rerender), st.timer.subscribe(rerender), st.captions.subscribe(rerender), st.watch.subscribe(rerender)];
+    const offs = [st.wb.subscribe(rerender), st.polls.subscribe(rerender), st.timer.subscribe(rerender), st.captions.subscribe(rerender), st.watch.subscribe(rerender), st.dg.subscribe(rerender)];
     return () => {
       offs.forEach((o) => o());
       st.wb.dispose();
@@ -160,8 +170,37 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
       st.timer.dispose();
       st.captions.dispose();
       st.watch.dispose();
+      st.dg.dispose();
+      st.fun.dispose();
     };
   }, [session, local]);
+
+  const [spin, setSpin] = useState<{ names: string[]; idx: number; by: string; key: number } | null>(null);
+  const [rpsAsk, setRpsAsk] = useState<{ id: string; from: string; name: string } | null>(null);
+  useEffect(() => {
+    if (!stores) return;
+    return stores.fun.on((e) => {
+      const nameOf = (id: string) => (id === session.selfId ? 'You' : (session.getSnapshot().participants.find((p) => p.id === id)?.name ?? 'Someone'));
+      if (e.kind === 'spin') setSpin({ names: e.names, idx: e.idx, by: nameOf(e.by), key: Date.now() });
+      else if (e.kind === 'rps-challenge') {
+        setRpsAsk({ id: e.id, from: e.from, name: e.name });
+        sounds.hand();
+      } else if (e.kind === 'rps-result') {
+        const a = e.a === session.selfId ? 'You' : e.aName;
+        const b = e.b === session.selfId ? 'You' : e.bName;
+        const w = e.winner === null ? 'Tie!' : `${e.winner === session.selfId ? 'You win' : `${e.winner === e.a ? e.aName : e.bName} wins`}!`;
+        toast(`⚔️ ${a} ${RPS_EMOJI[e.ac]} vs ${RPS_EMOJI[e.bc]} ${b}: ${w}`, 'success');
+        if (e.a === session.selfId || e.b === session.selfId) {
+          if (e.winner === session.selfId) sounds.win();
+          else if (e.winner === null) sounds.reveal();
+          else sounds.wrong();
+        }
+      }
+    });
+  }, [stores, session, toast]);
+  useEffect(() => {
+    stores?.dg.checkHost();
+  }, [stores, snap.participants]);
 
   const openActivity = useCallback((v: ActivityView) => {
     setActivityView(v);
@@ -184,12 +223,24 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
       sounds.message();
       showActivity(`📊 ${p.byName} started a poll: ${censor(p.question)}`, () => openActivity('polls'));
     };
+    // Draw & Guess: the host wipes the board each round; everyone jumps to the whiteboard.
+    stores.dg.clearBoard = () => stores.wb.clear();
+    stores.dg.onRoundStart = () => setStageView('whiteboard');
+    stores.dg.onEvent = (e) => {
+      if (e.kind === 'correct') sounds.correct();
+      else if (e.kind === 'wrong') sounds.wrong();
+      else if (e.kind === 'reveal') sounds.reveal();
+      else if (e.kind === 'end') {
+        sounds.win();
+        fxBus.emit('confetti');
+      }
+    };
     stores.watch.onRemoteLoad = (src, by) => {
       setStageView('watch');
       toast(`🎬 ${by} started watching: ${src.title}`);
     };
     stores.timer.onDone = () => {
-      sounds.party();
+      sounds.timer();
       toast("⏰ Time's up!", 'success');
     };
   }, [stores, showActivity, toast]);
@@ -625,7 +676,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   const mics = local.devices.filter((d) => d.kind === 'audioinput');
   const speakers = local.devices.filter((d) => d.kind === 'audiooutput');
   const cams = local.devices.filter((d) => d.kind === 'videoinput');
-  const fxOn = s.bgEffect !== 'none' || s.filter !== 'none' || s.lowLightBoost || s.autoFrame;
+  const fxOn = s.bgEffect !== 'none' || s.filter !== 'none' || s.lowLightBoost || s.autoFrame || s.sticker !== 'none';
 
   const micMenu: MenuSection[] = [
     {
@@ -662,6 +713,12 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
           icon: <Droplets size={16} />,
           onClick: () => updateSettings({ bgEffect: s.bgEffect === 'blur' ? 'none' : 'blur' }),
           testId: 'menu-blur',
+        },
+        {
+          label: s.sticker === 'none' ? 'Face stickers…' : 'Remove face sticker',
+          icon: <SmilePlus size={16} />,
+          onClick: () => (s.sticker === 'none' ? setSettingsTab('effects') : updateSettings({ sticker: 'none' })),
+          testId: 'menu-stickers',
         },
         { label: s.autoFrame ? 'Turn off auto-framing' : 'Auto-framing', icon: <ScanFace size={16} />, onClick: () => updateSettings({ autoFrame: !s.autoFrame }) },
         { label: 'Backgrounds & filters…', icon: <Sparkles size={16} />, hint: fxOn ? 'on' : undefined, onClick: () => setSettingsTab('effects'), testId: 'ctrl-effects' },
@@ -707,7 +764,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
 
   const signalDown = snap.signal !== 'connected';
   const micOn = local.micOn && !!local.mic;
-  const effectsOn = s.bgEffect !== 'none' || s.filter !== 'none' || s.lowLightBoost;
+  const effectsOn = s.bgEffect !== 'none' || s.filter !== 'none' || s.lowLightBoost || s.sticker !== 'none';
   const hands = snap.participants.filter((p) => p.hand).length;
 
   return (
@@ -786,7 +843,13 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
                 ))}
             />
           ) : stageView === 'whiteboard' && stores ? (
-            <WhiteboardView store={stores.wb} onClose={() => setStageView('grid')} code={session.code} />
+            <WhiteboardView
+              store={stores.wb}
+              onClose={() => setStageView('grid')}
+              code={session.code}
+              readOnly={stores.dg.active && stores.dg.phase === 'drawing' && !stores.dg.isDrawer}
+              banner={stores.dg.active ? <DrawGuessBanner dg={stores.dg} /> : undefined}
+            />
           ) : (
           <VideoGrid
             participants={snap.participants}
@@ -798,9 +861,16 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             activeSpeaker={activeSpeaker}
             hideSelf={s.hideSelfView}
             compact={s.compactTiles}
+            onThrow={(t, item) => stores?.fun.throwAt(t, item)}
           />
           )}
           <ReactionLayer items={floating} />
+          {stores && <ThrowLayer fun={stores.fun} />}
+          {stores?.dg.active && stageView !== 'whiteboard' && (
+            <div className="dg-float">
+              <DrawGuessBanner dg={stores.dg} />
+            </div>
+          )}
           {me.captions && stores && stores.captions.lines.size > 0 && (
             <div className="captions-overlay" data-testid="captions-overlay">
               {[...stores.captions.lines.values()].slice(-3).map((l) => (
@@ -879,6 +949,8 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
                   openGhost: () => setGhostOpen(true),
                   watch: stores.watch,
                   openWatch: () => setStageView('watch'),
+                  dg: stores.dg,
+                  fun: stores.fun,
                 }}
               />
             )}
@@ -1052,6 +1124,17 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             <li><kbd>Esc</kbd> Close dialogs</li>
           </ul>
         </Modal>
+      )}
+      {spin && <SpinOverlay key={spin.key} spin={spin} onDone={() => setSpin(null)} />}
+      {rpsAsk && stores && (
+        <RpsPrompt
+          name={rpsAsk.name}
+          onPick={(choice: RpsChoice) => {
+            stores.fun.answer(rpsAsk.id, rpsAsk.from, choice);
+            setRpsAsk(null);
+          }}
+          onDecline={() => setRpsAsk(null)}
+        />
       )}
       {ghostOpen && <GhostDialog local={local} session={session} onClose={() => setGhostOpen(false)} />}
     </div>

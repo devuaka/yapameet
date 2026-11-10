@@ -18,6 +18,9 @@ Free, browser-based video meetings. Create a link, send it, talk. No accounts, n
 - **Reactions**, **raise hand**, **push to talk** (hold Space while muted), "you're muted" warning
 - **Soundboard**: 8 built-in synthesized sounds + upload your own MP3/WAV/OGG/M4A (stored on your device). Everyone hears them, even while you're muted
 - **Mini player**: switch tabs during a call and Chrome/Edge pop out a floating window with the call and your controls (Document Picture-in-Picture + Media Session auto-PiP, like Meet); there's also a manual button
+- **Games** (Activities > Games): Draw & Guess (Pictionary-style on the shared whiteboard, private guessing, scores), Spin the wheel, Rock Paper Scissors duels, Would You Rather
+- **Throw stuff** at people: hover a video, hit 🍅 (tomato, egg, pie, slime, snowball, shoe, hearts, flowers) and it splats on their tile for everyone
+- **Face stickers**: shades, crown, top hat, party hat, clown nose, cat ears, devil horns, halo, heart eyes, mustache; tracked to your face (MediaPipe) so everyone sees them
 - **Watch together**: paste a YouTube link or a catbox.moe / litterbox (or any direct .mp4/.webm) link; play, pause and seeking are synced for everyone, drift is corrected automatically, the end of the video stops everyone, late joiners jump in at the right spot
 - **Swear filter** (on by default, per person) for chat, captions, polls and transcripts. Live voice can't be filtered: speech recognition only knows a word after everyone heard it
 - **Hear myself** toggle for the voice changer (use headphones)
@@ -252,3 +255,7 @@ Two notes from writing the test:
 | Stuck on "Connecting…" for one person | Their network blocks peer-to-peer. Configure TURN. |
 | Red banner "Can't reach the signaling service" | Brokers or Supabase unreachable (some school/office networks block them). Try Supabase or another network. |
 | No sound | Click the "enable sound" banner if shown, check the speaker selection in Settings. |
+
+## Credits
+
+Sound effects are real recordings from [Mixkit](https://mixkit.co/free-sound-effects/) under the Mixkit Sound Effects Free License (public/sfx). Background segmentation and face tracking use Google MediaPipe models.

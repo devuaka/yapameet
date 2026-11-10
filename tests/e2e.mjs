@@ -671,7 +671,7 @@ async function main() {
       await until(async () => (await B.page.locator('[data-testid="tile-remote-cam"]').getAttribute('data-audio')) === 'off', { what: 'muted' });
       await openTools(A.page, 'soundboard');
       const e0 = await boardEnergy(B.page);
-      await A.page.locator('[data-testid="pad-builtin:airhorn"]').click();
+      await A.page.locator('[data-testid="pad-builtin:partyhorn"]').click();
       const e1 = await until(async () => {
         const e = await boardEnergy(B.page);
         return e - e0 > 0.01 ? e : false;
@@ -1042,6 +1042,99 @@ async function main() {
         await until(() => remoteVideoPlaying(B.page), { what: 'camera back on' });
       }
       return 'upload (JPEG) and remove both reached B';
+    });
+
+    await step('Real recorded sounds: every sound file is served and decodes', async () => {
+      const r = await A.page.evaluate(async () => {
+        const names = ['ui-join', 'ui-leave', 'ui-message', 'ui-pop', 'ui-hand', 'game-splat', 'game-wheel', 'game-correct', 'sb-fanfare', 'sb-crickets', 'sb-applause'];
+        const ac = new AudioContext();
+        const out = [];
+        for (const n of names) {
+          const res = await fetch(`/sfx/${n}.mp3`);
+          const buf = await ac.decodeAudioData(await res.arrayBuffer());
+          out.push(`${n} ${buf.duration.toFixed(1)}s`);
+        }
+        return out;
+      });
+      return r.join(', ');
+    });
+
+    await step('Face stickers: the face tracker loads and the stickered video reaches B', async () => {
+      await A.page.evaluate(() => window.__yapameetSettings.update({ sticker: 'shades' }));
+      await until(() => A.page.evaluate(() => !!window.__yapameet.local.pipeline?.stickersReady), { what: 'face tracker ready', timeout: 30000 });
+      await until(() => remoteVideoPlaying(B.page), { what: 'frames with sticker' });
+      await A.page.evaluate(() => window.__yapameetSettings.update({ sticker: 'none' }));
+      await until(() => A.page.evaluate(() => window.__yapameet.local.pipeline === null), { what: 'pipeline off' });
+      return 'tracker running, processed video sent (sticker placement verified separately on a real face photo)';
+    });
+
+    await step('Draw & Guess: A draws, B guesses (wrong then right), roles swap, game ends with a winner', async () => {
+      await openTools(A.page, 'games');
+      await A.page.locator('[data-testid="dg-start"]').click();
+      const word1 = await until(async () => (await A.page.locator('[data-testid="dg-secret"] b').innerText().catch(() => '')).trim(), { what: 'A has the word' });
+      await B.page.locator('[data-testid="wb-canvas"]').waitFor({ timeout: 10000 });
+      const hint = await B.page.locator('[data-testid="dg-hint"]').innerText();
+      if (hint.replace(/[^a-z]/gi, '').length > 0) throw new Error('B can see letters right away: ' + hint);
+      await B.page.locator('[data-testid="dg-guess"]').fill('zzzz');
+      await B.page.locator('[data-testid="dg-guess"]').press('Enter');
+      await until(async () => (await A.page.locator('.dg-feed').innerText()).includes('zzzz'), { what: 'wrong guess shown to A' });
+      await B.page.locator('[data-testid="dg-guess"]').fill(word1.toUpperCase());
+      await B.page.locator('[data-testid="dg-guess"]').press('Enter');
+      await until(() => B.page.locator('[data-testid="dg-reveal"]').count(), { what: 'round 1 revealed on B' });
+      const word2 = await until(async () => (await B.page.locator('[data-testid="dg-secret"] b').innerText().catch(() => '')).trim(), { what: 'B draws round 2', timeout: 15000 });
+      if (await A.page.locator('[data-testid="dg-secret"]').count()) throw new Error('A can see the round 2 word');
+      await A.page.locator('[data-testid="dg-guess"]').fill(word2);
+      await A.page.locator('[data-testid="dg-guess"]').press('Enter');
+      const over = await until(async () => (await B.page.locator('[data-testid="dg-over"]').innerText().catch(() => '')).trim(), { what: 'game over on B', timeout: 15000 });
+      await closeSide(A.page);
+      for (const p of [A.page, B.page]) if (await p.locator('[data-testid="wb-close"]').count()) await p.locator('[data-testid="wb-close"]').click();
+      return `words "${word1}" then "${word2}"; ${over.split('\n')[0]}`;
+    });
+
+    await step('Throw a tomato at B: the splat shows on both screens', async () => {
+      await until(async () => (await A.page.locator('[data-testid="dg-over"]').count()) === 0, { what: 'game banner gone', timeout: 15000 });
+      const tile = A.page.locator('[data-testid="tile-remote-cam"]');
+      await tile.hover();
+      await tile.locator('[data-testid="tile-throw"]').click();
+      await A.page.locator('[data-testid="throw-tomato"]').click();
+      await until(() => B.page.locator('.throw-splat, .throw-proj').count(), { what: 'projectile/splat on B', timeout: 5000, interval: 50 });
+      await until(() => A.page.locator('.throw-splat').count(), { what: 'splat on A', timeout: 5000, interval: 50 });
+    });
+
+    await step('Spin the wheel: both see it land on the same person', async () => {
+      await openTools(A.page, 'games');
+      await A.page.locator('[data-testid="spin-start"]').click();
+      await B.page.locator('[data-testid="spin-overlay"]').waitFor({ timeout: 5000 });
+      const rb = await until(async () => {
+        const t = await B.page.locator('[data-testid="spin-result"]').innerText();
+        return t.includes('🎯') ? t : false;
+      }, { what: 'wheel result on B', timeout: 10000 });
+      const ra = await A.page.locator('[data-testid="spin-result"]').innerText();
+      if (ra !== rb) throw new Error(`A "${ra}" vs B "${rb}"`);
+      await A.page.locator('[data-testid="spin-overlay"]').click();
+      await B.page.locator('[data-testid="spin-overlay"]').click();
+      return rb;
+    });
+
+    await step('Rock Paper Scissors: A challenges, B answers, both get the result', async () => {
+      await A.page.locator('[data-testid="rps-rock"]').click();
+      await B.page.locator('[data-testid="rps-prompt"]').waitFor({ timeout: 8000 });
+      await B.page.locator('[data-testid="rps-answer-scissors"]').click();
+      const ta = await until(async () => (await A.page.locator('.toast').allInnerTexts()).find((t) => t.includes('⚔️')), { what: 'result toast on A' });
+      const tb = await until(async () => (await B.page.locator('.toast').allInnerTexts()).find((t) => t.includes('⚔️')), { what: 'result toast on B' });
+      if (!ta.includes('You win') || !tb.includes('Alice wins')) throw new Error(`A "${ta}" B "${tb}"`);
+      return tb;
+    });
+
+    await step('Would You Rather: draws a question as a live poll for everyone', async () => {
+      await A.page.locator('[data-testid="wyr-start"]').click();
+      await until(async () => (await B.page.locator('[data-testid="activity-card"]').innerText().catch(() => '')).includes('Would you rather'), { what: 'question card on B' });
+      await closeSide(A.page);
+      // Leave something on the board for the rejoin test (Draw & Guess wiped it).
+      await menuItem(A.page, 'ctrl-more', 'more-whiteboard');
+      await A.page.locator('[data-testid="wb-canvas"]').waitFor();
+      await drawLine(A.page, [0.2, 0.2], [0.8, 0.8]);
+      await A.page.locator('[data-testid="wb-close"]').click();
     });
 
     await step('Leave: A sees B leave quickly; Rejoin reconnects', async () => {

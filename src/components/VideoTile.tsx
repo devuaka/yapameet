@@ -2,6 +2,8 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { Ghost, Hand, Loader2, Maximize2, MicOff, MonitorUp, PictureInPicture2, Pin, PinOff, Radio, WifiOff } from 'lucide-react';
 import type { Participant } from '../rtc/MeetingSession';
 import { Avatar } from './controls';
+import { ThrowPicker } from './GameUI';
+import type { ThrowId } from '../rtc/games';
 import { VideoView, useSpeaking } from './media';
 
 export interface Tile {
@@ -18,7 +20,9 @@ export const VideoTile = memo(function VideoTile({
   showDetails,
   style,
   compact,
+  onThrow,
 }: {
+  onThrow?: (target: string, item: ThrowId) => void;
   tile: Tile;
   pinned: boolean;
   onPin: (key: string | null) => void;
@@ -32,6 +36,7 @@ export const VideoTile = memo(function VideoTile({
   const video = useRef<HTMLVideoElement>(null);
   const freeze = useRef<HTMLCanvasElement>(null);
   const [frozen, setFrozen] = useState(false);
+  const [throwing, setThrowing] = useState(false);
   const speaking = useSpeaking(p.id) && p.audio && kind === 'cam' && !p.leaving;
   const stream = kind === 'cam' ? p.camStream : p.screenStream;
   const showVideo = !!stream && (kind === 'cam' ? p.video : p.screen);
@@ -76,6 +81,7 @@ export const VideoTile = memo(function VideoTile({
       } ${p.hand && kind === 'cam' ? 'hand-up' : ''}`}
       style={style}
       data-testid={`tile-${p.isLocal ? 'local' : 'remote'}-${kind}`}
+      data-pid={kind === 'cam' ? p.id : undefined}
       data-name={p.name}
       data-conn={p.conn}
       data-video={showVideo ? 'on' : 'off'}
@@ -157,8 +163,24 @@ export const VideoTile = memo(function VideoTile({
         )}
       </div>
 
+      {throwing && onThrow && (
+        <div className="tile-throw-picker" onMouseLeave={() => setThrowing(false)}>
+          <ThrowPicker
+            onPick={(item) => {
+              onThrow(p.id, item);
+              setThrowing(false);
+            }}
+          />
+        </div>
+      )}
+
       {!p.leaving && (
         <div className="tile-actions">
+          {onThrow && kind === 'cam' && (
+            <button onClick={() => setThrowing((v) => !v)} title={`Throw something at ${p.isLocal ? 'yourself' : p.name}`} aria-label="Throw something" data-testid="tile-throw">
+              🍅
+            </button>
+          )}
           <button onClick={() => onPin(pinned ? null : tile.key)} title={pinned ? 'Unpin' : 'Pin'} aria-label={pinned ? 'Unpin' : 'Pin'}>
             {pinned ? <PinOff size={16} /> : <Pin size={16} />}
           </button>

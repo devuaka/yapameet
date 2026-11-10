@@ -19,6 +19,7 @@ import { BG_PRESETS, MAX_CUSTOM, addCustomBg, getCustomBgs, presetThumb, removeC
 import { FILTERS, cssFilterFor } from '../rtc/effects';
 import { supportedCodecs } from '../rtc/tuning';
 import { VOICES } from '../rtc/voice';
+import { STICKERS } from '../rtc/faceStickers';
 import { captionsSupported } from '../rtc/captions';
 import { EGGS, THEMES } from '../lib/themes';
 import { DeviceSelect, Toggle } from './controls';
@@ -335,6 +336,18 @@ export function EffectsPanel({ local }: { local: LocalMedia }) {
           <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => void upload(e.target.files?.[0])} data-testid="bg-file" />
         </div>
         <p className="muted small">Runs entirely on your device. Your real background is never sent while an effect is loading.</p>
+      </section>
+      <section className="panel-section">
+        <h3>Face stickers</h3>
+        <div className="sticker-grid" data-testid="sticker-grid">
+          {STICKERS.map((st) => (
+            <button key={st.id} className={`sticker-opt ${s.sticker === st.id ? 'sel' : ''}`} onClick={() => updateSettings({ sticker: st.id })} data-testid={`sticker-${st.id}`}>
+              <span>{st.emoji}</span>
+              {st.label}
+            </button>
+          ))}
+        </div>
+        <p className="muted small">Follows your face. Everyone sees it.</p>
       </section>
       <section className="panel-section">
         <h3>Filters</h3>

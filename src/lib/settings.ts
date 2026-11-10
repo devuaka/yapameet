@@ -72,6 +72,7 @@ export interface Settings {
   captionsLang: string;
   voiceFx: VoiceFx;
   autoFrame: boolean;
+  sticker: import('../rtc/faceStickers').StickerId;
   censorSwears: boolean;
   // secrets
   eggs: EggId[];
@@ -115,6 +116,7 @@ export const defaultSettings: Settings = {
   captionsLang: '',
   voiceFx: 'none',
   autoFrame: false,
+  sticker: 'none',
   censorSwears: true,
   eggs: [],
 };

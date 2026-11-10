@@ -42,7 +42,7 @@ function describeError(err: unknown, what: 'microphone' | 'camera' | 'screen'): 
 
 const effectOptions = (): EffectOptions => {
   const s = getSettings();
-  return { bg: s.bgEffect, bgImage: s.bgImage, filter: s.filter, lowLight: s.lowLightBoost, autoFrame: s.autoFrame };
+  return { bg: s.bgEffect, bgImage: s.bgImage, filter: s.filter, lowLight: s.lowLightBoost, autoFrame: s.autoFrame, sticker: s.sticker };
 };
 
 /**

@@ -10,7 +10,7 @@ import { parseMeetingInput } from '../lib/meetingCode';
 import { cryptoAvailable } from '../lib/crypto';
 import { addRecentMeeting, formatDuration } from '../lib/hooks';
 import { getSettings, updateSettings } from '../lib/settings';
-import { getAudioContext, sounds } from '../lib/sounds';
+import { getAudioContext, preloadSounds, sounds } from '../lib/sounds';
 
 type Phase = 'lobby' | 'call' | 'left';
 
@@ -51,6 +51,7 @@ export function MeetingPage() {
       if (!code) return;
       updateSettings({ displayName: name });
       getAudioContext(); // unlock WebAudio inside the click gesture
+      preloadSounds();
       addRecentMeeting(code);
       const s = new MeetingSession(code, local, name);
       sessionRef.current = s;
