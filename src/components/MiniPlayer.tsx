@@ -28,7 +28,7 @@ function MiniTile({ p, small }: { p: Participant; small?: boolean }) {
         <VideoView stream={stream} mirror={p.isLocal && !p.screen && s.mirrorSelf} fit={p.screen && !small ? 'contain' : 'cover'} />
       ) : (
         <div className="tile-avatar">
-          <Avatar name={p.name} size={small ? 32 : 64} src={p.pfp} />
+          <Avatar name={p.name} size={small ? 32 : 64} src={p.pfp ?? p.botImage} />
         </div>
       )}
       {!small && (

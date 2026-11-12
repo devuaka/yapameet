@@ -6,6 +6,7 @@ import { AudioPanel, EffectsPanel, VideoPanel } from './SettingsPanels';
 import { PfpEditor } from './PfpEditor';
 import { usePfp } from '../lib/pfp';
 import { usePeek } from '../lib/peek';
+import { GABEN_NAME, isGabenCode } from '../lib/gaben';
 import { LevelMeter, VideoView } from './media';
 import { copyText, useToast } from './Toast';
 import type { LocalMedia } from '../rtc/LocalMedia';
@@ -34,7 +35,8 @@ export function PreJoin({
   const [name, setName] = useState(defaultName);
   const [showSettings, setShowSettings] = useState<null | 'audio' | 'video' | 'effects' | 'picture'>(null);
   const pfp = usePfp();
-  const here = usePeek(code);
+  const peeked = usePeek(code);
+  const here = isGabenCode(code) && peeked ? [GABEN_NAME, ...peeked] : peeked;
   const mics = local.devices.filter((d) => d.kind === 'audioinput');
   const cams = local.devices.filter((d) => d.kind === 'videoinput');
 

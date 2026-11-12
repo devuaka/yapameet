@@ -59,4 +59,10 @@ export const EGGS: EggInfo[] = [
     hint: 'Chat commands start with a slash. One of them is not in /help.',
     found: 'Type /party in chat. Disco lights and confetti for the whole call.',
   },
+  {
+    id: 'gaben',
+    name: 'Lord Gaben',
+    hint: 'Name your meeting after the man who cannot count to three.',
+    found: 'Use the meeting code "gabenewel". Gabe Newell joins the call and thanks you every 36 seconds.',
+  },
 ];

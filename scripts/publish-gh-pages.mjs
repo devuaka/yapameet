@@ -67,15 +67,16 @@ function pushTree(branch, root, files, extra, message) {
 }
 
 const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+const trailer = '\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>';
 
 if (process.env.SKIP_SOURCE !== '1') {
   // .github is skipped: pushing workflow files needs a token with the `workflow` scope.
   const skipNames = new Set(['node_modules', 'dist', '.github', '.claude', '.wrangler', '.env', '.env.local']);
   const src = walk('.', (n, full) => skipNames.has(n) || full.endsWith(join('public', 'mediapipe')) || n.endsWith('.log') || n.endsWith('.tsbuildinfo'));
-  pushTree('main', '.', src, [], `Yapameet source (${stamp})`);
+  pushTree('main', '.', src, [], `Yapameet source (${stamp})${trailer}`);
 }
 
-pushTree('gh-pages', 'dist', walk('dist', () => false), [['.nojekyll', Buffer.from('')]], `Deploy site (${stamp})`);
+pushTree('gh-pages', 'dist', walk('dist', () => false), [['.nojekyll', Buffer.from('')]], `Deploy site (${stamp})${trailer}`);
 
 if (!tryApi('GET', `repos/${repo}/pages`)) {
   console.log('Enabling GitHub Pages from gh-pages…');

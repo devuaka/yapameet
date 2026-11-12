@@ -5,6 +5,7 @@ import { Emitter } from '../lib/emitter';
 import { getClientId, getSettings, subscribeSettings } from '../lib/settings';
 import { sounds } from '../lib/sounds';
 import { getPfp, isValidPfp, subscribePfp } from '../lib/pfp';
+import { GABEN_ID, GABEN_IMAGE, GABEN_NAME, GabenBot, isGabenCode } from '../lib/gaben';
 import { SignalingChannel } from '../signaling/SignalingChannel';
 import type { FxKind, PeerInfo, SignalMessage, TransportStatus } from '../signaling/types';
 import type { LocalMedia, TrackSlot } from './LocalMedia';
@@ -50,6 +51,9 @@ export interface Participant {
   roomPhoto: string | null;
   /** Profile picture (small data URL) or null for the initials avatar. */
   pfp: string | null;
+  /** A fake member (easter egg), shown with a picture instead of video. */
+  bot?: boolean;
+  botImage?: string;
 }
 
 export interface ChatMessage {
@@ -168,6 +172,7 @@ export class MeetingSession extends Emitter {
   private unsubLocal: (() => void) | null = null;
   private unsubSettings: (() => void) | null = null;
   private unsubPfp: (() => void) | null = null;
+  private gaben: GabenBot | null = null;
   private offPfpEvents: (() => void) | null = null;
   private snapshot: SessionSnapshot;
   private eventListeners = new Set<(e: SessionEvent) => void>();
@@ -215,6 +220,10 @@ export class MeetingSession extends Emitter {
     this.local.ensureMixer();
     this.unsubLocal = this.local.subscribe(this.onLocalChange);
     this.unsubSettings = subscribeSettings(this.onSettingsChange);
+    if (isGabenCode(this.code)) {
+      this.gaben = new GabenBot();
+      this.gaben.start();
+    }
     // Profile pictures travel peer-to-peer: to each person when their connection opens, and to everyone on change.
     this.unsubPfp = subscribePfp(() => {
       this.sendApp('pfp', getPfp());
@@ -272,6 +281,8 @@ export class MeetingSession extends Emitter {
     this.signal.close();
     this.unsubLocal?.();
     this.unsubSettings?.();
+    this.gaben?.stop();
+    this.gaben = null;
     this.unsubPfp?.();
     this.offPfpEvents?.();
     this.unsubPfp = this.offPfpEvents = null;
@@ -1052,7 +1063,38 @@ export class MeetingSession extends Emitter {
       signal: this.signal?.status ?? 'connecting',
       signalDetail: this.signal?.statusDetail ?? '',
       transport: this.signal?.transportName ?? '',
-      participants: [me, ...others],
+      participants: this.gaben
+        ? [
+            me,
+            ...others,
+            {
+              id: GABEN_ID,
+              name: GABEN_NAME,
+              isLocal: false,
+              audio: true,
+              video: false,
+              screen: false,
+              hand: false,
+              recording: false,
+              captions: false,
+              quality: null,
+              conn: 'connected',
+              relay: null,
+              rtt: null,
+              stats: null,
+              micStream: this.gaben.stream,
+              camStream: null,
+              screenStream: null,
+              screenAudioStream: null,
+              joinedAt: this.joinedAt,
+              leaving: false,
+              roomPhoto: null,
+              pfp: null,
+              bot: true,
+              botImage: GABEN_IMAGE,
+            } satisfies Participant,
+          ]
+        : [me, ...others],
       messages: this.messages,
     };
   }

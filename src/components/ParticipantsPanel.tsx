@@ -17,7 +17,7 @@ function Row({ p }: { p: Participant }) {
             : 'Connecting…';
   return (
     <li className={`person ${speaking ? 'speaking' : ''}`} data-testid="participant-row">
-      <Avatar name={p.name} size={36} src={p.pfp} />
+      <Avatar name={p.name} size={36} src={p.pfp ?? p.botImage} />
       <div className="person-info">
         <span className="person-name">
           {p.name}

@@ -98,6 +98,8 @@ export const VideoTile = memo(function VideoTile({
           mirror={p.isLocal && kind === 'cam' && mirrorSelf}
           fit={kind === 'screen' ? 'contain' : 'cover'}
         />
+      ) : p.botImage ? (
+        <img className="bot-img" src={p.botImage} alt={p.name} draggable={false} />
       ) : !ghosting ? (
         <div className="tile-avatar">
           <Avatar name={p.name} size={compact ? 48 : 84} src={p.pfp} />
@@ -156,6 +158,7 @@ export const VideoTile = memo(function VideoTile({
         {ghosting && <Ghost size={14} />}
         {kind === 'cam' && !p.audio && !p.leaving && <MicOff size={14} className="mic-off" aria-label="Muted" />}
         <span>{label}</span>
+        {p.bot && <span className="bot-tag">BOT</span>}
         {p.isLocal && kind === 'cam' && p.roomPhoto && (
           <span className="ghost-mark" title="Ghost Protocol armed (only you can see this)">
             👻

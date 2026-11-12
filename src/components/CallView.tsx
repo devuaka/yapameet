@@ -50,6 +50,7 @@ import type { LocalMedia } from '../rtc/LocalMedia';
 import { useNow } from '../lib/hooks';
 import { meetingUrl } from '../lib/meetingCode';
 import { findEgg, updateSettings, useSettings } from '../lib/settings';
+import { isGabenCode } from '../lib/gaben';
 import { setSoundsSink, sounds } from '../lib/sounds';
 import { audioLevels } from '../lib/audioLevel';
 import { callState, fxBus, useKonami } from '../lib/fx';
@@ -607,6 +608,13 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   useKonami(useCallback(() => session.sendFx('confetti'), [session]));
 
   // Easter egg: triple-click the logo to open Ghost Protocol.
+  useEffect(() => {
+    if (isGabenCode(session.code) && findEgg('gaben')) {
+      sounds.secret();
+      toast('👑 Secret found: Lord Gaben', 'success');
+    }
+  }, [session.code, toast]);
+
   const logoClicks = useRef<number[]>([]);
   const onLogoClick = () => {
     const t = Date.now();

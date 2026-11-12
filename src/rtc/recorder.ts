@@ -31,7 +31,7 @@ function drawStage(stage: HTMLElement, g: CanvasRenderingContext2D, W: number, H
     g.fillStyle = '#161829';
     g.fillRect(x, y, w, h);
     const v = tile.querySelector('video');
-    const img = tile.querySelector<HTMLImageElement>('img.ghost-room');
+    const img = tile.querySelector<HTMLImageElement>('img.ghost-room, img.bot-img');
     const frozen = tile.querySelector<HTMLCanvasElement>('canvas.ghost-freeze');
     if (img?.complete) g.drawImage(img, x, y, w, h);
     if (v && v.videoWidth) {

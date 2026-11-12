@@ -113,7 +113,7 @@ export class DrawGuessStore extends Emitter {
   // ---------------------------------------------------------------- host
 
   start() {
-    const people = this.session.getSnapshot().participants.filter((p) => !p.leaving);
+    const people = this.session.getSnapshot().participants.filter((p) => !p.leaving && !p.bot);
     if (people.length < 2) return false;
     this.order = people.map((p) => p.id).slice(0, 8);
     this.used.clear();

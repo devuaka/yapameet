@@ -271,7 +271,7 @@ export function GamesView({
 }) {
   useEmitter(dg);
   const toast = useToast();
-  const others = participants.filter((p) => !p.isLocal && !p.leaving);
+  const others = participants.filter((p) => !p.isLocal && !p.leaving && !p.bot);
   const [opponent, setOpponent] = useState('');
   const target = others.find((p) => p.id === opponent) ?? others[0];
 
