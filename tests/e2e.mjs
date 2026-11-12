@@ -317,7 +317,13 @@ async function main() {
       await B.page.waitForURL(`**/meeting/${code}`);
       await B.page.locator('[data-testid="name-input"]').fill('Bob');
       await until(() => B.page.locator('[data-testid="prejoin-video"]').count(), { what: 'camera preview' });
+      // The join screen says who's already in the call before you join.
+      const here = await until(async () => {
+        const t = await B.page.locator('[data-testid="whos-here"]').innerText();
+        return t.includes('Alice') ? t : false;
+      }, { what: "B sees Alice is here", timeout: 15000 });
       await B.page.locator('[data-testid="join-button"]').click();
+      return here;
     });
 
     await step('Both see 2 participants and a connected peer', async () => {
@@ -692,7 +698,7 @@ async function main() {
     });
 
     await step('Tools: fun buttons trigger effects on both screens', async () => {
-      await openTools(A.page, 'fun');
+      await openTools(A.page, 'games');
       await A.page.locator('[data-testid="tool-barrelroll"]').click();
       await until(() => B.page.evaluate(() => document.documentElement.classList.contains('fx-barrelroll')), { what: 'barrel roll on B', interval: 50 });
       await A.page.locator('[data-testid="tool-dice"]').click();
@@ -747,13 +753,12 @@ async function main() {
       return `remote video ${frames} in the mini player; mute/unmute from inside it reached B`;
     });
 
-    await step('Signal bars show connection quality on remote tiles', async () => {
-      const q = await until(async () => Number(await A.page.locator('[data-testid="net-bars"]').getAttribute('data-quality').catch(() => 0)), {
-        what: 'quality bars on A',
-        timeout: 10000,
-      });
+    await step('Connection quality is measured; weak-signal bars stay hidden on a good link', async () => {
+      const q = await until(() => A.page.evaluate(() => window.__yapameet.getSnapshot().participants[1]?.quality ?? 0), { what: 'quality score on A', timeout: 10000 });
       if (q < 3) throw new Error(`quality ${q} on a local connection`);
-      return `${q}/4 bars`;
+      const bars = await A.page.locator('[data-testid="net-bars"]').count();
+      if (bars) throw new Error('bars shown on a good connection');
+      return `${q}/4, bars hidden`;
     });
 
     await step('Whiteboard: A draws, B gets notified and sees the ink; clear wipes it for both', async () => {
@@ -1131,10 +1136,30 @@ async function main() {
       await until(async () => (await B.page.locator('[data-testid="activity-card"]').innerText().catch(() => '')).includes('Would you rather'), { what: 'question card on B' });
       await closeSide(A.page);
       // Leave something on the board for the rejoin test (Draw & Guess wiped it).
-      await menuItem(A.page, 'ctrl-more', 'more-whiteboard');
+      await openTools(A.page, 'whiteboard');
       await A.page.locator('[data-testid="wb-canvas"]').waitFor();
       await drawLine(A.page, [0.2, 0.2], [0.8, 0.8]);
       await A.page.locator('[data-testid="wb-close"]').click();
+    });
+
+    await step('Meeting info: shows the code, a QR code and copyable link', async () => {
+      await A.page.locator('[data-testid="copy-link"]').click();
+      await A.page.locator('[data-testid="meeting-info"]').waitFor();
+      await until(() => A.page.locator('[data-testid="qr"]').count(), { what: 'QR rendered' });
+      const text = await A.page.locator('[data-testid="meeting-info"]').innerText();
+      await A.page.keyboard.press('Escape');
+      if (!text.includes(code)) throw new Error('code missing from info card');
+      const elapsed = await A.page.locator('[data-testid="call-elapsed"]').innerText();
+      if (!/^\d+:\d\d/.test(elapsed)) throw new Error('call timer: ' + elapsed);
+      return `QR + link shown, call timer ${elapsed}`;
+    });
+
+    await step('Layout switch in the More menu', async () => {
+      await menuItem(A.page, 'ctrl-more', 'layout-grid');
+      await until(() => A.page.evaluate(() => window.__yapameetSettings.get().layout === 'grid'), { what: 'grid layout' });
+      await until(() => A.page.locator('.stage-grid').count(), { what: 'grid on screen' });
+      await menuItem(A.page, 'ctrl-more', 'layout-auto');
+      await until(() => A.page.evaluate(() => window.__yapameetSettings.get().layout === 'auto'), { what: 'auto layout' });
     });
 
     await step('Leave: A sees B leave quickly; Rejoin reconnects', async () => {

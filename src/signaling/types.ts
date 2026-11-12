@@ -39,6 +39,9 @@ export type SignalMessage =
   | { t: 'react'; id: string; emoji: string }
   | { t: 'fx'; id: string; fx: FxKind }
   | { t: 'typing' }
+  /** Pre-join "who's here?" question, and the answer (name only). */
+  | { t: 'peek' }
+  | { t: 'peek-reply'; name: string }
   | { t: 'app'; kind: string; data: unknown };
 
 export interface Envelope {

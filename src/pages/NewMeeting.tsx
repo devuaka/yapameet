@@ -4,6 +4,7 @@ import { ArrowLeft, Copy, RefreshCw, Share2, Video } from 'lucide-react';
 import { SiteHeader } from '../components/Brand';
 import { copyText, useToast } from '../components/Toast';
 import { generateMeetingCode, meetingUrl } from '../lib/meetingCode';
+import { QrCode } from '../components/MeetingInfo';
 import { updateSettings, useSettings } from '../lib/settings';
 
 export function NewMeeting() {
@@ -64,6 +65,11 @@ export function NewMeeting() {
             <button className="icon-btn" onClick={() => void copy('link')} aria-label="Copy link" title="Copy link">
               <Copy size={18} />
             </button>
+          </div>
+
+          <div className="new-qr-row">
+            <QrCode text={link} size={120} />
+            <span className="muted small">On your phone? Scan this with the camera to join from there.</span>
           </div>
 
           <div className="create-actions">

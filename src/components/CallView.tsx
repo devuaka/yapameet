@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
-  Copy,
   Hand,
   Maximize,
   MessageSquare,
@@ -24,12 +23,10 @@ import {
   ChevronUp,
   MoreVertical,
   LayoutGrid,
-  PenTool,
   Keyboard,
   Camera,
   Circle,
   Square,
-  Clapperboard,
   Speaker,
   AudioLines,
   ScanFace,
@@ -57,6 +54,8 @@ import { setSoundsSink, sounds } from '../lib/sounds';
 import { audioLevels } from '../lib/audioLevel';
 import { callState, fxBus, useKonami } from '../lib/fx';
 import { Logo } from './Brand';
+import { MeetingInfo } from './MeetingInfo';
+import { formatDuration } from '../lib/hooks';
 import { ChatPanel } from './ChatPanel';
 import { Modal, Toggle } from './controls';
 import { AppearancePanel, AudioPanel, EffectsPanel, MeetingPanel, VideoPanel } from './SettingsPanels';
@@ -84,7 +83,9 @@ function CtrlButton({
   testId,
   className,
   text,
+  badgeTestId,
 }: {
+  badgeTestId?: string;
   text?: string;
   icon: React.ReactNode;
   label: string;
@@ -106,8 +107,26 @@ function CtrlButton({
     >
       {icon}
       {text && <span className="ctrl-text">{text}</span>}
-      {badge ? <span className="badge">{badge}</span> : null}
+      {badge ? (
+        <span className="badge" data-testid={badgeTestId}>
+          {badge}
+        </span>
+      ) : null}
     </button>
+  );
+}
+
+function CallClock({ start, showClock }: { start: number; showClock: boolean }) {
+  const now = useNow(1000);
+  return (
+    <>
+      {showClock && <span className="muted hide-md">{new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>}
+      {start > 0 && (
+        <span className="call-elapsed" title="Call length" data-testid="call-elapsed">
+          {formatDuration(now - start)}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -118,11 +137,11 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   const snap = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const s = useSettings();
   const toast = useToast();
-  const now = useNow(15000);
   const root = useRef<HTMLDivElement>(null);
   const [panel, setPanel] = useState<SideTab | null>(null);
   const [activityView, setActivityView] = useState<ActivityView>('home');
   const [menu, setMenu] = useState<'more' | 'mic' | 'cam' | null>(null);
+  const [infoOpen, setInfoOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [pinned, setPinned] = useState<string | null>(null);
   const [seenOthers, setSeenOthers] = useState(0);
@@ -729,8 +748,6 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   const moreMenu: MenuSection[] = [
     {
       items: [
-        { label: 'Watch together', icon: <Clapperboard size={16} />, onClick: () => openActivity('watch'), testId: 'more-watch' },
-        { label: 'Whiteboard', icon: <PenTool size={16} />, onClick: () => setStageView('whiteboard'), testId: 'more-whiteboard' },
         {
           label: me.recording ? 'Stop recording' : 'Record call',
           icon: me.recording ? <Square size={16} /> : <Circle size={16} />,
@@ -746,16 +763,21 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
       ],
     },
     {
+      title: 'Layout',
+      items: (
+        [
+          ['auto', 'Auto'],
+          ['grid', 'Grid'],
+          ['speaker', 'Speaker'],
+        ] as const
+      ).map(([id, label]) => ({ label, checked: s.layout === id, onClick: () => updateSettings({ layout: id }), testId: `layout-${id}` })),
+    },
+    {
       items: [
-        { label: 'Backgrounds & filters', icon: <Sparkles size={16} />, onClick: () => setSettingsTab('effects'), testId: 'more-effects' },
         ...(miniPlayerSupported()
           ? [{ label: mini.open ? 'Close mini player' : 'Mini player', icon: <PictureInPicture2 size={16} />, onClick: () => (mini.open ? mini.close() : void mini.openMini()), testId: 'ctrl-mini' }]
           : []),
         { label: isFullscreen ? 'Exit fullscreen' : 'Fullscreen', icon: isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />, onClick: toggleFullscreen, testId: 'ctrl-fullscreen' },
-      ],
-    },
-    {
-      items: [
         { label: 'Keyboard shortcuts', icon: <Keyboard size={16} />, hint: '?', onClick: () => setShowShortcuts(true) },
         { label: 'Settings', icon: <SettingsIcon size={16} />, onClick: () => setSettingsTab('audio'), testId: 'ctrl-settings' },
       ],
@@ -769,45 +791,26 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
 
   return (
     <div className={`call ${panel ? 'with-panel' : ''} ${s.compactTiles ? 'compact' : ''}`} ref={root} data-testid="call">
-      <header className="call-top">
-        <button className="call-brand" onClick={onLogoClick} aria-label="Yapameet" title="Yapameet" data-testid="call-logo">
-          <Logo size={28} />
-          <span className="brand-name hide-sm">Yapameet</span>
-        </button>
-        <button className="code-chip" onClick={() => void copyLink()} title="Copy meeting link" data-testid="copy-link">
-          <span className="mono">{session.code}</span>
-          <Copy size={14} />
-        </button>
-        <div className="call-top-right">
-          {snap.participants.some((p) => p.recording) && (
-            <span className="count-chip rec-chip" title={`Recording: ${snap.participants.filter((p) => p.recording).map((p) => (p.isLocal ? 'you' : p.name)).join(', ')}`} data-testid="rec-chip">
-              <CircleDot size={14} /> REC
-            </span>
-          )}
-          {stores?.timer.running && (
-            <span className="count-chip timer-chip" data-testid="timer-chip">
-              <TimerIcon size={14} /> {formatClock(stores.timer.remaining)}
-            </span>
-          )}
-          {hands > 0 && (
-            <span className="count-chip hand-chip" title="Raised hands">
-              <Hand size={14} /> {hands}
-            </span>
-          )}
-          <span
-            className={`signal-dot sig-${snap.signal}`}
-            title={`Signaling: ${snap.transport} (${snap.signal}${snap.signalDetail ? `, ${snap.signalDetail}` : ''})`}
-            data-testid="signal-status"
-            data-status={snap.signal}
-          />
-          <span className="count-chip" data-testid="participant-count">
-            <Users size={14} /> {snap.participants.filter((p) => !p.leaving).length}
-          </span>
-        </div>
-      </header>
 
       <div className="call-body">
         <main className="call-stage" ref={stageRef}>
+          <div className="stage-status">
+            {snap.participants.some((p) => p.recording) && (
+              <span className="count-chip rec-chip" title={`Recording: ${snap.participants.filter((p) => p.recording).map((p) => (p.isLocal ? 'you' : p.name)).join(', ')}`} data-testid="rec-chip">
+                <CircleDot size={14} /> REC
+              </span>
+            )}
+            {stores?.timer.running && (
+              <span className="count-chip timer-chip" data-testid="timer-chip">
+                <TimerIcon size={14} /> {formatClock(stores.timer.remaining)}
+              </span>
+            )}
+            {hands > 0 && (
+              <span className="count-chip hand-chip" title="Raised hands">
+                <Hand size={14} /> {hands}
+              </span>
+            )}
+          </div>
           {signalDown && (
             <div className="banner banner-warn">
               <WifiOff size={16} />
@@ -960,9 +963,23 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
 
       <footer className="call-controls">
         <div className="controls-left hide-sm">
-          {s.showClock && <span className="muted">{new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>}
-          <span className="controls-sep" />
-          <span className="mono muted">{session.code}</span>
+          <button className="call-brand" onClick={onLogoClick} aria-label="Yapameet" title="Yapameet" data-testid="call-logo">
+            <Logo size={26} />
+          </button>
+          <div className="react-wrap">
+            <button className={`meet-chip ${infoOpen ? 'open' : ''}`} onClick={() => setInfoOpen((v) => !v)} title="Meeting info & invite" data-testid="copy-link">
+              <span
+                className={`signal-dot sig-${snap.signal}`}
+                title={`Signaling: ${snap.transport} (${snap.signal}${snap.signalDetail ? `, ${snap.signalDetail}` : ''})`}
+                data-testid="signal-status"
+                data-status={snap.signal}
+              />
+              <span className="mono">{session.code}</span>
+              <ChevronUp size={14} />
+            </button>
+            {infoOpen && <MeetingInfo code={session.code} people={snap.participants.filter((p) => !p.leaving).length} onClose={() => setInfoOpen(false)} />}
+          </div>
+          <CallClock start={me.joinedAt} showClock={s.showClock} />
         </div>
         <div className="controls-center">
           <div className="ctrl-group">
@@ -1034,7 +1051,8 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             label="People"
             text="People"
             active={panel === 'people'}
-            badge={remotes.length ? snap.participants.length : undefined}
+            badge={snap.participants.filter((p) => !p.leaving).length}
+            badgeTestId="participant-count"
             onClick={() => setPanel(panel === 'people' ? null : 'people')}
             testId="ctrl-people"
           />

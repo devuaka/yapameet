@@ -7,6 +7,7 @@ import './styles/global.css';
 import './styles/themes.css';
 import './styles/features.css';
 import './styles/fun.css';
+import './styles/makeover.css';
 import { App } from './App';
 import { ToastProvider } from './components/Toast';
 import { getSettings } from './lib/settings';

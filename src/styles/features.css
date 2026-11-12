@@ -1455,11 +1455,7 @@ html.fx-flash body::before {
   gap: 10px;
   font-size: 14px;
 }
-.controls-sep {
-  width: 1px;
-  height: 16px;
-  background: var(--border-strong);
-}
+
 .controls-center {
   align-items: center;
   gap: 14px !important;
@@ -1704,9 +1700,7 @@ html.fx-flash body::before {
   background: var(--surface);
   white-space: nowrap;
 }
-.act-chev {
-  color: var(--muted);
-}
+
 .fun-btn.wide {
   width: 100%;
   margin-bottom: 8px;

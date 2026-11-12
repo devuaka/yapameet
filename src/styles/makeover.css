@@ -1,0 +1,357 @@
+/* ---------- makeover: calmer surfaces, floating dock, more room for video ---------- */
+
+/* No top bar any more: give the stage the space, keep a little breathing room. */
+.call-body {
+  padding-top: 12px;
+}
+
+/* Status chips (REC, timer, raised hands) float over the stage instead. */
+.stage-status {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 21;
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+.stage-status .count-chip {
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+.stage-status:empty {
+  display: none;
+}
+
+/* Tiles: softer edge, gentle depth. */
+.tile {
+  border-radius: 18px;
+  border-color: color-mix(in srgb, var(--text) 6%, transparent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.tile-label {
+  border-radius: 10px;
+  padding: 5px 10px;
+  letter-spacing: 0.01em;
+}
+
+/* ---------- control bar: one floating dock ---------- */
+.call-controls {
+  padding: 10px 16px calc(14px + env(safe-area-inset-bottom));
+}
+.controls-center {
+  padding: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+  gap: 6px !important;
+}
+.controls-center .ctrl-group {
+  gap: 4px;
+}
+.controls-center .ctrl-group + .ctrl-group {
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+}
+.controls-center .ctrl.danger {
+  margin-left: 8px;
+  border-radius: 999px;
+}
+.ctrl {
+  width: 46px;
+  height: 46px;
+  background: var(--surface-2);
+}
+.ctrl:hover {
+  background: var(--surface-3);
+}
+.ctrl-split {
+  background: var(--surface-2);
+}
+.ctrl-split .ctrl {
+  background: transparent;
+}
+.ctrl-split .ctrl.off {
+  background: var(--danger);
+}
+.controls-right .ctrl {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(16px);
+}
+.controls-right .ctrl.active {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+/* Bottom-left: logo, meeting chip, clock + call length. */
+.controls-left {
+  gap: 8px !important;
+}
+.call-brand {
+  padding: 4px;
+  border-radius: 12px;
+}
+.call-brand:hover {
+  background: var(--surface-2);
+}
+.meet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--text-2);
+  font-size: 13.5px;
+  transition: background 0.15s, color 0.15s;
+}
+.meet-chip:hover,
+.meet-chip.open {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.meet-chip.open svg {
+  transform: rotate(180deg);
+}
+.meet-chip .signal-dot {
+  width: 8px;
+  height: 8px;
+}
+.call-elapsed {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* Meeting info card with QR. */
+.meeting-info {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 14px);
+  width: min(360px, 92vw);
+  padding: 14px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: rise 0.15s ease;
+}
+.mi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mi-body {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.mi-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.mi-code {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+.meeting-info .link-box .icon-btn {
+  flex: none;
+}
+.qr {
+  display: block;
+  flex: none;
+  border-radius: 12px;
+  background: #fff;
+  padding: 6px;
+  box-sizing: content-box;
+}
+.qr-empty {
+  background: var(--surface-2);
+}
+
+/* Activities: compact two-column launcher, everything visible without scrolling. */
+.act-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.act-grid-2 .act-tile {
+  min-width: 0;
+}
+.act-grid-2 .act-tile {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 12px;
+  position: relative;
+}
+.act-grid-2 .act-tile:hover {
+  transform: translateY(-2px);
+}
+.act-grid-2 .act-icon {
+  width: 38px;
+  height: 38px;
+}
+.act-grid-2 .act-text {
+  width: 100%;
+}
+.act-grid-2 .act-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.act-grid-2 .act-status {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+/* Side panel: same glass as the dock. */
+.side-panel {
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(16px);
+  border-radius: 20px;
+}
+
+/* ---------- landing ---------- */
+.pill-hello {
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  text-decoration: none;
+  color: var(--text);
+}
+.pill-hello .avatar {
+  box-shadow: none;
+  font-size: 9px !important;
+}
+.recent-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+.recent-row > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 2px;
+}
+.recent-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13.5px;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.recent-chip:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.recent-chip small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.feature-strip {
+  max-width: 1180px;
+  margin: 24px auto 0;
+  padding: 0 clamp(16px, 4vw, 48px);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.feature-strip span {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid var(--border);
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+/* New meeting: QR next to a short hint. */
+.new-qr-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 10px;
+  border-radius: 16px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+}
+
+/* Pre-join: who's already here. */
+.here-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 14px;
+  font-size: 14.5px;
+  font-weight: 600;
+  min-height: 22px;
+}
+.here-line .muted {
+  font-weight: 500;
+}
+.here-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent);
+  animation: here-pulse 1.8s ease-out infinite;
+}
+@keyframes here-pulse {
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (max-width: 1100px) {
+  .hide-md {
+    display: none !important;
+  }
+}
+@media (max-width: 640px) {
+  .controls-center {
+    padding: 4px;
+    gap: 2px !important;
+  }
+  .controls-center .ctrl-group + .ctrl-group {
+    margin-left: 2px;
+    padding-left: 4px;
+  }
+  .controls-center .ctrl.danger {
+    margin-left: 4px;
+  }
+  .ctrl {
+    width: 42px;
+    height: 42px;
+  }
+  .call-body {
+    padding-top: 6px;
+  }
+}

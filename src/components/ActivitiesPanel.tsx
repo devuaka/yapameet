@@ -5,7 +5,6 @@ import {
   BarChart3,
   Camera,
   Captions,
-  ChevronRight,
   Circle,
   Coins,
   Dices,
@@ -55,7 +54,7 @@ import { Toggle } from './controls';
 import { parseWatchUrl, type WatchStore } from '../rtc/watch';
 import { useToast } from './Toast';
 
-export type ActivityView = 'home' | 'games' | 'watch' | 'polls' | 'timer' | 'captions' | 'soundboard' | 'voice' | 'capture' | 'fun';
+export type ActivityView = 'home' | 'games' | 'watch' | 'polls' | 'timer' | 'captions' | 'soundboard' | 'voice' | 'capture';
 
 export interface ActivityFeatures {
   openWhiteboard: () => void;
@@ -84,7 +83,6 @@ const TITLES: Record<Exclude<ActivityView, 'home'>, string> = {
   soundboard: 'Soundboard',
   voice: 'Voice changer',
   capture: 'Record & photo',
-  fun: 'Fun & effects',
 };
 
 /** Activities: a launcher grid; every tool gets its own page instead of one long list. */
@@ -128,9 +126,13 @@ export function ActivitiesPanel({
           {view === 'soundboard' && <SoundboardView local={local} />}
           {view === 'voice' && <VoiceView local={local} />}
           {view === 'watch' && <WatchPage features={features} />}
-          {view === 'games' && <GamesView dg={features.dg} fun={features.fun} polls={features.polls} participants={participants} />}
+          {view === 'games' && (
+            <>
+              <GamesView dg={features.dg} fun={features.fun} polls={features.polls} participants={participants} />
+              <FunView session={session} features={features} />
+            </>
+          )}
           {view === 'capture' && <CaptureView features={features} now={now} />}
-          {view === 'fun' && <FunView session={session} features={features} />}
         </div>
       </div>
     );
@@ -142,14 +144,14 @@ export function ActivitiesPanel({
     {
       id: 'games',
       title: 'Games',
-      sub: 'Draw & Guess, wheel, RPS, Would You Rather',
+      sub: 'Draw & Guess, wheel, RPS, fun',
       icon: <Gamepad2 size={22} />,
       status: features.dg.active ? `Round ${features.dg.round}/${features.dg.total}` : undefined,
     },
     {
       id: 'watch',
       title: 'Watch together',
-      sub: 'YouTube & video links, synced',
+      sub: 'YouTube & video links',
       icon: <Clapperboard size={22} />,
       status: features.watch.src ? (features.watch.playing ? 'Playing' : 'Paused') : undefined,
     },
@@ -185,26 +187,26 @@ export function ActivitiesPanel({
       status: features.recording ? `REC ${formatElapsed(now - features.recordStart)}` : undefined,
       tone: features.recording ? 'rec' : undefined,
     },
-    { id: 'fun', title: 'Fun & effects', sub: 'Confetti, party, more', icon: <PartyPopper size={22} /> },
   ];
 
   return (
     <div className="side-content" data-testid="activities-panel" data-view="home">
       <div className="tools-scroll">
-        <div className="act-grid">
+        <div className="act-grid act-grid-2">
           {tiles.map((t) => (
             <button
               key={t.id}
               className={`act-tile ${t.status ? 'live' : ''} ${t.tone ?? ''}`}
               onClick={() => (t.id === 'whiteboard' ? features.openWhiteboard() : onView(t.id))}
               data-testid={`act-${t.id}`}
+              title={t.sub}
             >
               <span className="act-icon">{t.icon}</span>
               <span className="act-text">
                 <b>{t.title}</b>
                 <small>{t.sub}</small>
               </span>
-              {t.status ? <span className="act-status">{t.status}</span> : <ChevronRight size={16} className="act-chev" />}
+              {t.status && <span className="act-status">{t.status}</span>}
             </button>
           ))}
         </div>
@@ -400,6 +402,7 @@ function FunView({ session, features }: { session: MeetingSession; features: Act
   ];
   return (
     <section className="tools-section">
+      <h3>Quick fun</h3>
       <div className="fun-grid">
         {items.map((i) => (
           <button key={i.id} className="fun-btn" onClick={i.on} data-testid={i.id}>

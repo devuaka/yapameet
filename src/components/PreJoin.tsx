@@ -5,6 +5,7 @@ import { Avatar, DeviceSelect, Modal } from './controls';
 import { AudioPanel, EffectsPanel, VideoPanel } from './SettingsPanels';
 import { PfpEditor } from './PfpEditor';
 import { usePfp } from '../lib/pfp';
+import { usePeek } from '../lib/peek';
 import { LevelMeter, VideoView } from './media';
 import { copyText, useToast } from './Toast';
 import type { LocalMedia } from '../rtc/LocalMedia';
@@ -33,6 +34,7 @@ export function PreJoin({
   const [name, setName] = useState(defaultName);
   const [showSettings, setShowSettings] = useState<null | 'audio' | 'video' | 'effects' | 'picture'>(null);
   const pfp = usePfp();
+  const here = usePeek(code);
   const mics = local.devices.filter((d) => d.kind === 'audioinput');
   const cams = local.devices.filter((d) => d.kind === 'videoinput');
 
@@ -128,6 +130,22 @@ export function PreJoin({
 
         <form className="prejoin-side" onSubmit={submit}>
           <h1>Ready to join?</h1>
+          <p className="here-line" data-testid="whos-here">
+            {here === null ? (
+              <span className="muted">Checking who's here…</span>
+            ) : here.length === 0 ? (
+              <span className="muted">No one else is here yet</span>
+            ) : (
+              <>
+                <span className="here-dot" />
+                {here.length === 1
+                  ? `${here[0]} is in this call`
+                  : here.length === 2
+                    ? `${here[0]} and ${here[1]} are in this call`
+                    : `${here.slice(0, 2).join(', ')} and ${here.length - 2} more are in this call`}
+              </>
+            )}
+          </p>
           <button
             type="button"
             className="code-chip"

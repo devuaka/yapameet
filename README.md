@@ -18,6 +18,9 @@ Free, browser-based video meetings. Create a link, send it, talk. No accounts, n
 - **Reactions**, **raise hand**, **push to talk** (hold Space while muted), "you're muted" warning
 - **Soundboard**: 8 built-in synthesized sounds + upload your own MP3/WAV/OGG/M4A (stored on your device). Everyone hears them, even while you're muted
 - **Mini player**: switch tabs during a call and Chrome/Edge pop out a floating window with the call and your controls (Document Picture-in-Picture + Media Session auto-PiP, like Meet); there's also a manual button
+- **Invite by QR**: the meeting chip (bottom left) opens a card with the code, link and a QR code to join from a phone; call length timer next to it
+- **See who is here before you join**: the join screen shows who is already in the call
+- **Home page** greets you with your picture and lists recent meetings for one-click rejoin
 - **Games** (Activities > Games): Draw & Guess (Pictionary-style on the shared whiteboard, private guessing, scores), Spin the wheel, Rock Paper Scissors duels, Would You Rather
 - **Throw stuff** at people: hover a video, hit 🍅 (tomato, egg, pie, slime, snowball, shoe, hearts, flowers) and it splats on their tile for everyone
 - **Face stickers**: shades, crown, top hat, party hat, clown nose, cat ears, devil horns, halo, heart eyes, mustache; tracked to your face (MediaPipe) so everyone sees them

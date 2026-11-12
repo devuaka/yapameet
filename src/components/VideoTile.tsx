@@ -134,7 +134,7 @@ export const VideoTile = memo(function VideoTile({
         </div>
       )}
 
-      {!showDetails && !p.isLocal && !p.leaving && kind === 'cam' && p.quality != null && (
+      {!showDetails && !p.isLocal && !p.leaving && kind === 'cam' && p.quality != null && p.quality <= 2 && (
         <div className={`net-bars q${p.quality}`} title={['No connection', 'Poor connection', 'Fair connection', 'Good connection', 'Excellent connection'][p.quality]} data-testid="net-bars" data-quality={p.quality}>
           <i />
           <i />

@@ -1,9 +1,12 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Keyboard, Lock, MessageSquare, MonitorUp, Plus, Users, Video, Zap } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Clock, Keyboard, Plus, Zap } from 'lucide-react';
+import { Avatar } from '../components/controls';
+import { getRecentMeetings } from '../lib/hooks';
+import { usePfp } from '../lib/pfp';
 import { SiteHeader } from '../components/Brand';
 import { parseMeetingInput } from '../lib/meetingCode';
-import { findEgg, updateSettings } from '../lib/settings';
+import { findEgg, updateSettings, useSettings } from '../lib/settings';
 import { sounds } from '../lib/sounds';
 import { useToast } from '../components/Toast';
 
@@ -11,6 +14,9 @@ export function Landing() {
   const nav = useNavigate();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  const s = useSettings();
+  const pfp = usePfp();
+  const recent = getRecentMeetings().slice(0, 4);
   const [spin, setSpin] = useState(false);
   const toast = useToast();
   const clicks = useRef<number[]>([]);
@@ -49,17 +55,23 @@ export function Landing() {
       <SiteHeader onLogoClick={onLogo} spin={spin} />
       <main className="hero">
         <div className="hero-copy">
-          <span className="pill">
-            <Zap size={14} /> Free · No account · Peer-to-peer
-          </span>
+          {s.displayName ? (
+            <Link to="/settings#profile" className="pill pill-hello" title="Your profile" data-testid="hello">
+              <Avatar name={s.displayName} size={22} src={pfp} /> Hey, {s.displayName.split(' ')[0]} 👋
+            </Link>
+          ) : (
+            <span className="pill">
+              <Zap size={14} /> Free · No account · Peer-to-peer
+            </span>
+          )}
           <h1>
             Hop on a call.
             <br />
             <span className="gradient-text">Start yapping.</span>
           </h1>
           <p className="lead">
-            Yapameet is video meetings straight from your browser. Make a link, send it, talk. Your video goes directly
-            between participants, not through our servers (we don't have any).
+            Video calls straight from your browser. Make a link, send it, talk. Your video goes directly between
+            people, never through a server.
           </p>
           <div className="hero-actions">
             <button className="btn btn-primary btn-lg" onClick={() => nav('/new')} data-testid="new-meeting">
@@ -85,6 +97,19 @@ export function Landing() {
             </form>
           </div>
           {error && <p className="error-text">{error}</p>}
+          {recent.length > 0 && (
+            <div className="recent-row" data-testid="recent-row">
+              <span className="muted small">
+                <Clock size={13} /> Recent
+              </span>
+              {recent.map((m) => (
+                <Link key={m.code} to={`/meeting/${m.code}`} className="recent-chip" title={`Rejoin ${m.code}`}>
+                  <span className="mono">{m.code}</span>
+                  <small>{ago(m.at)}</small>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="mock-window">
@@ -106,20 +131,9 @@ export function Landing() {
         </div>
       </main>
 
-      <section className="features">
-        {[
-          { icon: <Video />, title: 'HD video & audio', text: 'Camera, mic and speaker selection, noise suppression, speaking indicators.' },
-          { icon: <MonitorUp />, title: 'Screen sharing', text: 'Share a tab, window or full screen, with tab or system audio where the browser supports it.' },
-          { icon: <MessageSquare />, title: 'Live chat', text: 'Message everyone in the meeting with names, timestamps and unread badges.' },
-          { icon: <Lock />, title: 'Private by design', text: 'Media is encrypted peer-to-peer (DTLS-SRTP). Signaling is encrypted with a key from your meeting code.' },
-          { icon: <Users />, title: 'Small groups', text: 'Best for 2 to 6 people. Every participant connects directly to every other.' },
-          { icon: <Zap />, title: 'Zero cost', text: 'Static site + free signaling. Nothing to install, no account, no server bill.' },
-        ].map((f) => (
-          <div className="feature-card" key={f.title}>
-            <div className="feature-icon">{f.icon}</div>
-            <h3>{f.title}</h3>
-            <p>{f.text}</p>
-          </div>
+      <section className="feature-strip" aria-label="What's inside">
+        {['🖥️ Screen share', '🎬 Watch together', '🎮 Games', '✏️ Whiteboard', '🔊 Soundboard', '🎭 Face stickers', '💬 Chat & polls', '🔒 Peer-to-peer, encrypted'].map((t) => (
+          <span key={t}>{t}</span>
         ))}
       </section>
 
@@ -128,4 +142,14 @@ export function Landing() {
       </footer>
     </div>
   );
+}
+
+function ago(ts: number) {
+  const m = Math.round((Date.now() - ts) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  return d < 7 ? `${d}d ago` : new Date(ts).toLocaleDateString();
 }

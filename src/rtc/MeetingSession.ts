@@ -570,6 +570,10 @@ export class MeetingSession extends Emitter {
         if (typeof msg.kind === 'string') this.fire({ type: 'app', from, name, kind: msg.kind, data: msg.data, isLocal: false });
         break;
       }
+      case 'peek':
+        // Someone on the join screen asks who's here: answer with our name only.
+        void this.signal.send({ t: 'peek-reply', name: this.name }, from);
+        break;
       case 'typing': {
         const name = this.links.get(from)?.info.name;
         if (name) this.fire({ type: 'typing', from, name });
