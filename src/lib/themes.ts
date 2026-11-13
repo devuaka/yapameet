@@ -63,6 +63,6 @@ export const EGGS: EggInfo[] = [
     id: 'gaben',
     name: 'Lord Gaben',
     hint: 'Name your meeting after the man who cannot count to three.',
-    found: 'Use the meeting code "gabenewel". Gabe Newell joins the call and thanks you every 36 seconds.',
+    found: 'Use the meeting code "gabenewel". Gabe Newell joins the call and says one of his lines every 36 seconds.',
   },
 ];
