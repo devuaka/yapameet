@@ -84,6 +84,7 @@ export const sounds = {
   secret: () => play('ui-secret', 0.6, true),
   party: () => play('ui-party', 0.6),
   ghost: () => play('ui-ghost', 0.6),
+  thunder: () => play('fx-thunder', 0.8),
   timer: () => play('ui-timer', 0.6),
   test: () => play('ui-test', 0.8, true),
   // games & throwables

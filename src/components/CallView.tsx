@@ -31,6 +31,7 @@ import {
   AudioLines,
   ScanFace,
   Droplets,
+  Zap,
 } from 'lucide-react';
 import { WhiteboardStore } from '../rtc/whiteboard';
 import { PollStore, TimerStore, formatClock } from '../rtc/collab';
@@ -62,6 +63,8 @@ import { Modal, Toggle } from './controls';
 import { AppearancePanel, AudioPanel, EffectsPanel, MeetingPanel, VideoPanel } from './SettingsPanels';
 import { PfpEditor } from './PfpEditor';
 import { GhostDialog } from './GhostDialog';
+import { VanishDialog } from './VanishDialog';
+import { VANISH_CODE } from '../lib/vanish';
 import { RemoteAudio } from './media';
 import { ParticipantsPanel } from './ParticipantsPanel';
 import { miniPlayerSupported, useMiniPlayer } from './MiniPlayer';
@@ -152,6 +155,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   const [picker, setPicker] = useState(false);
   const [floating, setFloating] = useState<FloatingReaction[]>([]);
   const [ghostOpen, setGhostOpen] = useState(false);
+  const [vanishOpen, setVanishOpen] = useState(false);
   const [ptt, setPtt] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
   const reactionId = useRef(0);
@@ -632,6 +636,14 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   // Chat with slash commands (and a couple of hidden ones).
   const onSend = (raw: string) => {
     const text = raw.trim();
+    // Secret toy unlock. Never sent, so nobody else learns the code.
+    if (VANISH_CODE.test(text)) {
+      if (findEgg('omar')) {
+        sounds.secret();
+        toast('⚡ Secret toy unlocked: Lightning Vanish. Hit the ⚡ button!', 'success');
+      } else toast('You already have Lightning Vanish. Hit the ⚡ button.');
+      return;
+    }
     if (/do a barrel roll/i.test(text)) {
       session.sendChat(text);
       session.sendFx('barrelroll');
@@ -1027,6 +1039,16 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
               {picker && <ReactionPicker onPick={(e) => session.react(e)} onClose={() => setPicker(false)} />}
             </div>
             <CtrlButton icon={<Hand size={22} />} label={session.hand ? 'Lower hand (Ctrl+Alt+H)' : 'Raise hand (Ctrl+Alt+H)'} active={me.hand} onClick={toggleHand} testId="ctrl-hand" />
+            {s.eggs.includes('omar') && (
+              <CtrlButton
+                icon={<Zap size={22} />}
+                label={me.vanish ? 'Lightning Vanish (you are gone right now)' : 'Lightning Vanish'}
+                active={!!me.vanish || vanishOpen}
+                onClick={() => !me.vanish && setVanishOpen(true)}
+                testId="ctrl-vanish"
+                className="vanish-btn"
+              />
+            )}
             {local.canShareScreen && (
               <CtrlButton
                 icon={local.screen ? <MonitorOff size={22} /> : <MonitorUp size={22} />}
@@ -1163,6 +1185,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
         />
       )}
       {ghostOpen && <GhostDialog local={local} session={session} onClose={() => setGhostOpen(false)} />}
+      {vanishOpen && <VanishDialog local={local} session={session} onClose={() => setVanishOpen(false)} />}
     </div>
   );
 }

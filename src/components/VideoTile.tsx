@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { Ghost, Hand, Loader2, Maximize2, MicOff, MonitorUp, PictureInPicture2, Pin, PinOff, Radio, WifiOff } from 'lucide-react';
+import { Ghost, Hand, Loader2, Maximize2, MicOff, MonitorUp, PictureInPicture2, Pin, PinOff, Radio, WifiOff, Zap } from 'lucide-react';
+import { useVanishPhase } from '../lib/vanish';
 import type { Participant } from '../rtc/MeetingSession';
 import { Avatar } from './controls';
 import { ThrowPicker } from './GameUI';
@@ -37,7 +38,11 @@ export const VideoTile = memo(function VideoTile({
   const freeze = useRef<HTMLCanvasElement>(null);
   const [frozen, setFrozen] = useState(false);
   const [throwing, setThrowing] = useState(false);
-  const speaking = useSpeaking(p.id) && p.audio && kind === 'cam' && !p.leaving;
+  // Lightning Vanish: struck, then only the empty room shows, then back.
+  const vanish = kind === 'cam' && !p.leaving ? (p.vanish ?? null) : null;
+  const zap = useVanishPhase(vanish?.at);
+  const vanished = zap === 'gone' || zap === 'back';
+  const speaking = useSpeaking(p.id) && p.audio && kind === 'cam' && !p.leaving && !vanished;
   const stream = kind === 'cam' ? p.camStream : p.screenStream;
   const showVideo = !!stream && (kind === 'cam' ? p.video : p.screen);
   const ghosting = p.leaving && kind === 'cam' && !!p.roomPhoto;
@@ -78,7 +83,7 @@ export const VideoTile = memo(function VideoTile({
       ref={box}
       className={`tile ${speaking ? 'speaking' : ''} ${kind === 'screen' ? 'tile-screen' : ''} ${compact ? 'compact' : ''} ${
         p.leaving ? (ghosting ? 'ghosting' : 'leaving') : ''
-      } ${p.hand && kind === 'cam' ? 'hand-up' : ''}`}
+      } ${p.hand && kind === 'cam' ? 'hand-up' : ''} ${zap ? `zap-${zap}` : ''}`}
       style={style}
       data-testid={`tile-${p.isLocal ? 'local' : 'remote'}-${kind}`}
       data-pid={kind === 'cam' ? p.id : undefined}
@@ -87,6 +92,7 @@ export const VideoTile = memo(function VideoTile({
       data-video={showVideo ? 'on' : 'off'}
       data-audio={p.audio ? 'on' : 'off'}
       data-leaving={p.leaving ? (ghosting ? 'ghost' : 'yes') : undefined}
+      data-vanish={zap ?? undefined}
       onDoubleClick={fullscreen}
     >
       {ghosting && <img className="ghost-room" src={p.roomPhoto!} alt="" />}
@@ -112,6 +118,37 @@ export const VideoTile = memo(function VideoTile({
           {!showVideo && (
             <div className="tile-avatar ghost-freeze fading">
               <Avatar name={p.name} size={compact ? 48 : 84} src={p.pfp} />
+            </div>
+          )}
+        </>
+      )}
+
+      {vanish && zap === 'strike' && (
+        <div className="zap-overlay" aria-hidden="true">
+          <div className="zap-flash" />
+          <svg className="zap-bolt" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <polyline className="glow" points="54,0 47,17 57,23 43,42 55,48 48,66" />
+            <polyline className="glow" points="57,23 68,34 64,43 71,52" />
+            <polyline className="core" points="54,0 47,17 57,23 43,42 55,48 48,66" />
+            <polyline className="core" points="57,23 68,34 64,43 71,52" />
+          </svg>
+        </div>
+      )}
+      {vanish && vanished && (
+        <>
+          <img
+            className={`smite-room ${zap === 'back' ? 'leaving' : ''} ${p.isLocal && mirrorSelf ? 'mirror' : ''}`}
+            src={vanish.photo}
+            alt=""
+            draggable={false}
+          />
+          {zap === 'gone' && (
+            <div className="zap-smoke" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
             </div>
           )}
         </>
@@ -156,6 +193,7 @@ export const VideoTile = memo(function VideoTile({
       <div className="tile-label">
         {kind === 'screen' && <MonitorUp size={14} />}
         {ghosting && <Ghost size={14} />}
+        {zap && <Zap size={14} className="zap-mark" />}
         {kind === 'cam' && !p.audio && !p.leaving && <MicOff size={14} className="mic-off" aria-label="Muted" />}
         <span>{label}</span>
         {p.bot && <span className="bot-tag">BOT</span>}

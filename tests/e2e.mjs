@@ -1280,6 +1280,30 @@ async function main() {
       }
     });
 
+    await step('Secret toy: omar123.exe unlocks Lightning Vanish, A is struck and vanishes for B, then comes back', async () => {
+      if (!(await A.page.locator('[data-testid="chat-input"]').count())) await A.page.locator('[data-testid="ctrl-chat"]').click();
+      await A.page.locator('[data-testid="chat-input"]').fill('omar123.exe');
+      await A.page.locator('[data-testid="chat-input"]').press('Enter');
+      await A.page.locator('[data-testid="ctrl-vanish"]').waitFor({ timeout: 5000 });
+      const saved = await A.page.evaluate(() => JSON.parse(localStorage.getItem('yapameet:settings:v1') || '{}').eggs || []);
+      if (!saved.includes('omar')) throw new Error('unlock was not saved');
+      const leaked = await B.page.evaluate(() => window.__yapameet.getSnapshot().messages.some((m) => /omar123/i.test(m.text)));
+      if (leaked) throw new Error('the secret code was sent to B');
+      if (await B.page.locator('[data-testid="ctrl-vanish"]').count()) throw new Error('B got the button without unlocking');
+      await A.page.locator('[data-testid="ctrl-vanish"]').click();
+      await A.page.locator('[data-testid="vanish-dialog"]').waitFor();
+      const tileB = B.page.locator('[data-testid="tile-remote-cam"]');
+      await until(async () => (await tileB.getAttribute('data-vanish')) === 'strike', { what: 'strike on B', timeout: 15000, interval: 50 });
+      const bolt = await tileB.locator('.zap-bolt').count();
+      await until(async () => (await tileB.getAttribute('data-vanish')) === 'gone', { what: 'vanished on B', interval: 50 });
+      const t0 = Date.now();
+      const room = await tileB.locator('img.smite-room').count();
+      const mine = await A.page.locator('[data-testid="tile-local-cam"]').getAttribute('data-vanish');
+      if (!bolt || !room || mine !== 'gone') throw new Error(`bolt=${bolt} room=${room} A's own tile=${mine}`);
+      await until(async () => (await tileB.getAttribute('data-vanish')) === null, { what: 'back on B', timeout: 20000 });
+      return `struck, then gone for ${((Date.now() - t0) / 1000).toFixed(1)} s on B (and on A's own tile)`;
+    });
+
     await step('Ghost Protocol: triple-click logo, capture empty room, B receives the photo', async () => {
       const logo = A.page.locator('[data-testid="call-logo"]');
       await logo.click();

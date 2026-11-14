@@ -6,6 +6,7 @@ import { getClientId, getSettings, subscribeSettings } from '../lib/settings';
 import { sounds } from '../lib/sounds';
 import { getPfp, isValidPfp, subscribePfp } from '../lib/pfp';
 import { GABEN_ID, GABEN_IMAGE, GABEN_NAME, GabenBot, isGabenCode } from '../lib/gaben';
+import { BACK_MS, isRoomPhoto, VANISH_TOTAL_MS, type Vanish } from '../lib/vanish';
 import { SignalingChannel } from '../signaling/SignalingChannel';
 import type { FxKind, PeerInfo, SignalMessage, TransportStatus } from '../signaling/types';
 import type { LocalMedia, TrackSlot } from './LocalMedia';
@@ -51,6 +52,8 @@ export interface Participant {
   roomPhoto: string | null;
   /** Profile picture (small data URL) or null for the initials avatar. */
   pfp: string | null;
+  /** Lightning Vanish secret toy: struck at `at`, then only `photo` (their empty room) is shown for a while. */
+  vanish?: Vanish | null;
   /** A fake member (easter egg), shown with a picture instead of video. */
   bot?: boolean;
   botImage?: string;
@@ -140,6 +143,7 @@ class PeerLink {
   attempts = 0;
   lastRestartRequest = 0;
   roomPhoto: string | null = null;
+  vanish: Vanish | null = null;
   pfp: string | null = null;
   leaving = false;
   queue: Promise<void> = Promise.resolve();
@@ -183,6 +187,9 @@ export class MeetingSession extends Emitter {
   captionsWanted = false;
   /** Ghost mode easter egg: a JPEG of our empty room, shared with peers. */
   roomPhoto: string | null = null;
+  /** Lightning Vanish: set while we are struck / vanished. */
+  vanish: Vanish | null = null;
+  private vanishTimers = new Map<string, number[]>();
 
   constructor(
     readonly code: string,
@@ -238,6 +245,11 @@ export class MeetingSession extends Emitter {
         if (!link) return;
         link.pfp = isValidPfp(e.data) ? e.data : null;
         this.emit();
+      } else if (e.type === 'app' && e.kind === 'vanish') {
+        const link = this.links.get(e.from);
+        if (!link || link.vanish || !isRoomPhoto(e.data)) return;
+        link.vanish = { photo: e.data, at: Date.now() };
+        this.runVanish(e.from);
       }
     });
     (window as unknown as { __yapameet?: MeetingSession }).__yapameet = this;
@@ -282,6 +294,7 @@ export class MeetingSession extends Emitter {
     this.unsubLocal?.();
     this.unsubSettings?.();
     this.gaben?.stop();
+    this.clearVanishTimers();
     this.gaben = null;
     this.unsubPfp?.();
     this.offPfpEvents?.();
@@ -387,6 +400,40 @@ export class MeetingSession extends Emitter {
     this.seen.add(id);
     this.fire({ type: 'fx', from: this.selfId, name: this.name, fx, isLocal: true });
     void this.signal.send({ t: 'fx', id, fx });
+  }
+
+  /** Lightning Vanish: get struck by lightning, then only our empty room shows for everyone. */
+  strike(photo: string) {
+    if (this.left || this.vanish || !isRoomPhoto(photo)) return;
+    this.vanish = { photo, at: Date.now() };
+    this.sendApp('vanish', photo);
+    this.runVanish(this.selfId);
+  }
+
+  private runVanish(id: string) {
+    sounds.thunder();
+    this.clearVanishTimers(id);
+    this.vanishTimers.set(id, [
+      window.setTimeout(() => sounds.reveal(), VANISH_TOTAL_MS - BACK_MS),
+      window.setTimeout(() => {
+        this.vanishTimers.delete(id);
+        if (id === this.selfId) this.vanish = null;
+        else {
+          const link = this.links.get(id);
+          if (link) link.vanish = null;
+        }
+        this.emit();
+      }, VANISH_TOTAL_MS),
+    ]);
+    this.emit();
+  }
+
+  private clearVanishTimers(id?: string) {
+    for (const [k, timers] of this.vanishTimers) {
+      if (id && k !== id) continue;
+      timers.forEach(clearTimeout);
+      this.vanishTimers.delete(k);
+    }
   }
 
   /** Ghost mode: share a photo of our empty room so we can fade into it when leaving. */
@@ -1030,6 +1077,7 @@ export class MeetingSession extends Emitter {
       joinedAt: this.joinedAt,
       leaving: false,
       roomPhoto: this.roomPhoto,
+      vanish: this.vanish,
       pfp: getPfp(),
     };
     const others: Participant[] = [...this.links.values()]
@@ -1056,6 +1104,7 @@ export class MeetingSession extends Emitter {
         joinedAt: l.joinedAt,
         leaving: l.leaving,
         roomPhoto: l.roomPhoto,
+        vanish: l.vanish,
         pfp: l.pfp,
       }));
     return {

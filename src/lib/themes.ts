@@ -65,4 +65,10 @@ export const EGGS: EggInfo[] = [
     hint: 'Name your meeting after the man who cannot count to three.',
     found: 'Use the meeting code "gabenewel". Gabe Newell joins the call and says one of his lines every 36 seconds.',
   },
+  {
+    id: 'omar',
+    name: 'Lightning Vanish',
+    hint: 'Some programs only run from the chat box.',
+    found: 'Type omar123.exe in the meeting chat. Unlocks the ⚡ button: snap your empty room, get struck by lightning and vanish for 15 seconds.',
+  },
 ];

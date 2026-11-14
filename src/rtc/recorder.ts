@@ -72,6 +72,20 @@ function drawStage(stage: HTMLElement, g: CanvasRenderingContext2D, W: number, H
       g.textBaseline = 'middle';
       g.fillText(avatar?.textContent ?? '?', x + w / 2, y + h / 2);
     }
+    const vanished = tile.querySelector<HTMLImageElement>('img.smite-room');
+    if (vanished?.complete && vanished.naturalWidth) {
+      const s = Math.max(w / vanished.naturalWidth, h / vanished.naturalHeight);
+      const dw = vanished.naturalWidth * s;
+      const dh = vanished.naturalHeight * s;
+      g.save();
+      g.globalAlpha = Number(getComputedStyle(vanished).opacity) || 0;
+      if (vanished.classList.contains('mirror')) {
+        g.translate(x + w, y);
+        g.scale(-1, 1);
+        g.drawImage(vanished, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      } else g.drawImage(vanished, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+      g.restore();
+    }
     if (tile.classList.contains('speaking')) {
       g.strokeStyle = '#a78bfa';
       g.lineWidth = 4 * sx;
