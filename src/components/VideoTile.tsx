@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { Ghost, Hand, Loader2, Maximize2, MicOff, MonitorUp, PictureInPicture2, Pin, PinOff, Radio, WifiOff, Zap } from 'lucide-react';
 import { useVanishPhase } from '../lib/vanish';
 import type { Participant } from '../rtc/MeetingSession';
-import { Avatar } from './controls';
+import { Avatar, hueOf } from './controls';
 import { ThrowPicker } from './GameUI';
 import type { ThrowId } from '../rtc/games';
 import { VideoView, useSpeaking } from './media';
@@ -98,17 +98,12 @@ export const VideoTile = memo(function VideoTile({
       {ghosting && <img className="ghost-room" src={p.roomPhoto!} alt="" />}
 
       {showVideo && !(ghosting && frozen) ? (
-        <VideoView
-          ref={video}
-          stream={stream}
-          mirror={p.isLocal && kind === 'cam' && mirrorSelf}
-          fit={kind === 'screen' ? 'contain' : 'cover'}
-        />
+        <VideoView ref={video} stream={stream} mirror={p.isLocal && kind === 'cam' && mirrorSelf} fit={kind === 'screen' ? 'contain' : 'cover'} />
       ) : p.botImage ? (
         <img className="bot-img" src={p.botImage} alt={p.name} draggable={false} />
       ) : !ghosting ? (
-        <div className="tile-avatar">
-          <Avatar name={p.name} size={compact ? 48 : 84} src={p.pfp} />
+        <div className="tile-avatar" style={{ ['--hue' as string]: hueOf(p.name) }}>
+          <Avatar name={p.name} size={compact ? 52 : 96} src={p.pfp} />
         </div>
       ) : null}
 
@@ -116,8 +111,8 @@ export const VideoTile = memo(function VideoTile({
         <>
           <canvas ref={freeze} className={`ghost-freeze ${frozen ? 'fading' : ''}`} hidden={!showVideo} />
           {!showVideo && (
-            <div className="tile-avatar ghost-freeze fading">
-              <Avatar name={p.name} size={compact ? 48 : 84} src={p.pfp} />
+            <div className="tile-avatar ghost-freeze fading" style={{ ['--hue' as string]: hueOf(p.name) }}>
+              <Avatar name={p.name} size={compact ? 52 : 96} src={p.pfp} />
             </div>
           )}
         </>
@@ -136,12 +131,7 @@ export const VideoTile = memo(function VideoTile({
       )}
       {vanish && vanished && (
         <>
-          <img
-            className={`smite-room ${zap === 'back' ? 'leaving' : ''} ${p.isLocal && mirrorSelf ? 'mirror' : ''}`}
-            src={vanish.photo}
-            alt=""
-            draggable={false}
-          />
+          <img className={`smite-room ${zap === 'back' ? 'leaving' : ''} ${p.isLocal && mirrorSelf ? 'mirror' : ''}`} src={vanish.photo} alt="" draggable={false} />
           {zap === 'gone' && (
             <div className="zap-smoke" aria-hidden="true">
               <i />
@@ -157,9 +147,7 @@ export const VideoTile = memo(function VideoTile({
       {!p.isLocal && !p.leaving && p.conn !== 'connected' && (
         <div className={`tile-status status-${p.conn}`}>
           {p.conn === 'failed' ? <WifiOff size={16} /> : <Loader2 size={16} className="spin" />}
-          <span>
-            {p.conn === 'connecting' ? 'Connecting…' : p.conn === 'reconnecting' ? 'Reconnecting…' : "Can't connect (network blocks peer-to-peer)"}
-          </span>
+          <span>{p.conn === 'connecting' ? 'Connecting…' : p.conn === 'reconnecting' ? 'Reconnecting…' : "Can't connect (network blocks peer-to-peer)"}</span>
         </div>
       )}
 
@@ -174,7 +162,12 @@ export const VideoTile = memo(function VideoTile({
       )}
 
       {!showDetails && !p.isLocal && !p.leaving && kind === 'cam' && p.quality != null && p.quality <= 2 && (
-        <div className={`net-bars q${p.quality}`} title={['No connection', 'Poor connection', 'Fair connection', 'Good connection', 'Excellent connection'][p.quality]} data-testid="net-bars" data-quality={p.quality}>
+        <div
+          className={`net-bars q${p.quality}`}
+          title={['No connection', 'Poor connection', 'Fair connection', 'Good connection', 'Excellent connection'][p.quality]}
+          data-testid="net-bars"
+          data-quality={p.quality}
+        >
           <i />
           <i />
           <i />
@@ -182,7 +175,11 @@ export const VideoTile = memo(function VideoTile({
         </div>
       )}
 
-      {p.recording && kind === 'cam' && !p.leaving && <div className="tile-rec" title="Recording">REC</div>}
+      {p.recording && kind === 'cam' && !p.leaving && (
+        <div className="tile-rec" title="Recording">
+          REC
+        </div>
+      )}
 
       {p.hand && kind === 'cam' && !p.leaving && (
         <div className="hand-badge" title="Hand raised" data-testid="hand-badge">
@@ -194,7 +191,14 @@ export const VideoTile = memo(function VideoTile({
         {kind === 'screen' && <MonitorUp size={14} />}
         {ghosting && <Ghost size={14} />}
         {zap && <Zap size={14} className="zap-mark" />}
-        {kind === 'cam' && !p.audio && !p.leaving && <MicOff size={14} className="mic-off" aria-label="Muted" />}
+        {kind === 'cam' && !p.leaving && !p.audio && <MicOff size={14} className="mic-off" aria-label="Muted" />}
+        {speaking && (
+          <i className="eq on" aria-hidden="true">
+            <b />
+            <b />
+            <b />
+          </i>
+        )}
         <span>{label}</span>
         {p.bot && <span className="bot-tag">BOT</span>}
         {p.isLocal && kind === 'cam' && p.roomPhoto && (
@@ -222,7 +226,7 @@ export const VideoTile = memo(function VideoTile({
               🍅
             </button>
           )}
-          <button onClick={() => onPin(pinned ? null : tile.key)} title={pinned ? 'Unpin' : 'Pin'} aria-label={pinned ? 'Unpin' : 'Pin'}>
+          <button onClick={() => onPin(pinned ? null : tile.key)} title={pinned ? 'Unpin' : 'Pin'} aria-label={pinned ? 'Unpin' : 'Pin'} className={pinned ? 'on' : ''}>
             {pinned ? <PinOff size={16} /> : <Pin size={16} />}
           </button>
           {showVideo && document.pictureInPictureEnabled && (

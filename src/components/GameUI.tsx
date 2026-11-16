@@ -284,7 +284,7 @@ export function GamesView({
         </div>
         <p className="muted small">Take turns drawing a secret word on the whiteboard. Guess fast for more points. Needs 2+ people.</p>
         {dg.active ? (
-          <div className="create-actions">
+          <div className="btn-row">
             <span className="muted small">
               Round {dg.round}/{dg.total} in progress
             </span>

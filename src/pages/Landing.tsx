@@ -1,21 +1,50 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Clock, Keyboard, Plus, Zap } from 'lucide-react';
-import { Avatar } from '../components/controls';
+import {
+  ArrowRight,
+  Clapperboard,
+  Clock,
+  Gamepad2,
+  Hand,
+  Keyboard,
+  Mic,
+  MonitorUp,
+  Music4,
+  PenTool,
+  PhoneOff,
+  ShieldCheck,
+  SmilePlus,
+  Sparkles,
+  Video,
+  Zap,
+} from 'lucide-react';
 import { getRecentMeetings } from '../lib/hooks';
-import { usePfp } from '../lib/pfp';
 import { SiteHeader } from '../components/Brand';
-import { parseMeetingInput } from '../lib/meetingCode';
-import { findEgg, updateSettings, useSettings } from '../lib/settings';
+import { generateMeetingCode, parseMeetingInput } from '../lib/meetingCode';
+import { findEgg, updateSettings } from '../lib/settings';
 import { sounds } from '../lib/sounds';
 import { useToast } from '../components/Toast';
+
+const FEATURES = [
+  { icon: <Clapperboard size={20} />, title: 'Watch together', text: 'YouTube or your own video links, perfectly in sync for everyone.', c: '#f43f5e' },
+  { icon: <Gamepad2 size={20} />, title: 'Games', text: 'Draw & Guess, spin the wheel, rock paper scissors, would you rather.', c: '#8b5cf6' },
+  { icon: <PenTool size={20} />, title: 'Whiteboard', text: 'Sketch ideas (or nonsense) together in real time.', c: '#f59e0b' },
+  { icon: <Music4 size={20} />, title: 'Soundboard & voices', text: 'Drop sound effects, upload your own, talk like a robot.', c: '#ec4899' },
+  { icon: <Sparkles size={20} />, title: 'Backgrounds & stickers', text: 'Blur, virtual rooms, filters and stickers that follow your face.', c: '#38bdf8' },
+  { icon: <ShieldCheck size={20} />, title: 'Private by design', text: 'Calls go straight between people, encrypted. No account needed.', c: '#34d399' },
+];
+
+const MOCK_PEOPLE = [
+  { face: '😎', name: 'Maya', hue: 262 },
+  { face: '🤠', name: 'Jo', hue: 212 },
+  { face: '🐱', name: 'Kit', hue: 330 },
+  { face: '👾', name: 'Sam', hue: 168 },
+];
 
 export function Landing() {
   const nav = useNavigate();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
-  const s = useSettings();
-  const pfp = usePfp();
   const recent = getRecentMeetings().slice(0, 4);
   const [spin, setSpin] = useState(false);
   const toast = useToast();
@@ -53,92 +82,119 @@ export function Landing() {
     <div className="page landing">
       <div className="bg-glow" aria-hidden="true" />
       <SiteHeader onLogoClick={onLogo} spin={spin} />
+
       <main className="hero">
-        <div className="hero-copy">
-          {s.displayName ? (
-            <Link to="/settings#profile" className="pill pill-hello" title="Your profile" data-testid="hello">
-              <Avatar name={s.displayName} size={22} src={pfp} /> Hey, {s.displayName.split(' ')[0]} 👋
-            </Link>
-          ) : (
-            <span className="pill">
-              <Zap size={14} /> Free · No account · Peer-to-peer
-            </span>
-          )}
-          <h1>
-            Hop on a call.
-            <br />
-            <span className="gradient-text">Start yapping.</span>
-          </h1>
-          <p className="lead">
-            Video calls straight from your browser. Make a link, send it, talk. Your video goes directly between
-            people, never through a server.
-          </p>
-          <div className="hero-actions">
-            <button className="btn btn-primary btn-lg" onClick={() => nav('/new')} data-testid="new-meeting">
-              <Plus size={20} /> New meeting
+        <span className="pill">
+          <Zap size={14} /> Free · No account · No installs
+        </span>
+        <h1>
+          Hop on a call.
+          <br />
+          <span className="gradient-text">Start yapping.</span>
+        </h1>
+        <p className="lead">Video calls straight from your browser. Make a link, send it to your people, and talk.</p>
+
+        <div className="start-bar">
+          <button className="btn btn-primary btn-lg" onClick={() => nav(`/meeting/${generateMeetingCode()}`)} data-testid="new-meeting">
+            <Video size={20} /> New meeting
+          </button>
+          <form className={`code-form ${error ? 'has-error' : ''}`} onSubmit={join}>
+            <Keyboard size={18} />
+            <input
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value);
+                setError('');
+              }}
+              placeholder="Enter a code or link"
+              aria-label="Meeting code or link"
+              data-testid="landing-code"
+            />
+            <button className="btn btn-small" type="submit" disabled={!code.trim()} data-testid="landing-join">
+              Join <ArrowRight size={15} />
             </button>
-            <form className="code-form" onSubmit={join}>
-              <div className={`input-icon ${error ? 'has-error' : ''}`}>
-                <Keyboard size={18} />
-                <input
-                  value={code}
-                  onChange={(e) => {
-                    setCode(e.target.value);
-                    setError('');
-                  }}
-                  placeholder="Enter a code or link"
-                  aria-label="Meeting code or link"
-                  data-testid="landing-code"
-                />
-              </div>
-              <button className="btn btn-ghost btn-lg" type="submit" disabled={!code.trim()}>
-                Join
-              </button>
-            </form>
-          </div>
-          {error && <p className="error-text">{error}</p>}
-          {recent.length > 0 && (
-            <div className="recent-row" data-testid="recent-row">
-              <span className="muted small">
-                <Clock size={13} /> Recent
-              </span>
-              {recent.map((m) => (
-                <Link key={m.code} to={`/meeting/${m.code}`} className="recent-chip" title={`Rejoin ${m.code}`}>
-                  <span className="mono">{m.code}</span>
-                  <small>{ago(m.at)}</small>
-                </Link>
-              ))}
-            </div>
-          )}
+          </form>
         </div>
-        <div className="hero-art" aria-hidden="true">
-          <div className="mock-window">
-            <div className="mock-grid">
-              {['#8b5cf6', '#3b82f6', '#ec4899', '#14b8a6'].map((c, i) => (
-                <div key={i} className={`mock-tile ${i === 1 ? 'speaking' : ''}`} style={{ ['--c' as string]: c }}>
-                  <div className="mock-avatar" />
-                  <div className="mock-name" />
-                </div>
-              ))}
-            </div>
-            <div className="mock-bar">
-              <span />
-              <span />
-              <span className="red" />
-              <span />
-            </div>
+        {error && <p className="error-text">{error}</p>}
+
+        {recent.length > 0 && (
+          <div className="recent-row" data-testid="recent-row">
+            <span className="muted small">
+              <Clock size={13} /> Recent
+            </span>
+            {recent.map((m) => (
+              <Link key={m.code} to={`/meeting/${m.code}`} className="recent-chip" title={`Rejoin ${m.code}`}>
+                <span className="mono">{m.code}</span>
+                <small>{ago(m.at)}</small>
+              </Link>
+            ))}
           </div>
-        </div>
+        )}
       </main>
 
-      <section className="feature-strip" aria-label="What's inside">
-        {['🖥️ Screen share', '🎬 Watch together', '🎮 Games', '✏️ Whiteboard', '🔊 Soundboard', '🎭 Face stickers', '💬 Chat & polls', '🔒 Peer-to-peer, encrypted'].map((t) => (
-          <span key={t}>{t}</span>
-        ))}
+      <div className="hero-art" aria-hidden="true">
+        <div className="mock">
+          <div className="mock-grid">
+            {MOCK_PEOPLE.map((p, i) => (
+              <div key={p.name} className={`mock-tile m${i + 1}`} style={{ ['--hue' as string]: p.hue }}>
+                <span className="mock-face">{p.face}</span>
+                <span className="mock-name">
+                  <i className="eq on">
+                    <b />
+                    <b />
+                    <b />
+                  </i>
+                  {p.name}
+                </span>
+                {i === 1 && (
+                  <span className="mock-hand">
+                    <Hand size={14} />
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+          <span className="mock-float f1">🔥</span>
+          <span className="mock-float f2">😂</span>
+          <span className="mock-float f3">🎉</span>
+          <div className="mock-bubble">
+            <b>Kit</b> one more round? 🎮
+          </div>
+          <div className="mock-dock">
+            <span>
+              <Mic size={16} />
+            </span>
+            <span>
+              <Video size={16} />
+            </span>
+            <span>
+              <MonitorUp size={16} />
+            </span>
+            <span>
+              <SmilePlus size={16} />
+            </span>
+            <span className="red">
+              <PhoneOff size={16} />
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <section className="features" aria-label="What's inside">
+        <h2>More than a video call</h2>
+        <div className="feature-grid">
+          {FEATURES.map((f) => (
+            <div key={f.title} className="feature" style={{ ['--c' as string]: f.c }}>
+              <span className="feature-icon">{f.icon}</span>
+              <h3>{f.title}</h3>
+              <p>{f.text}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       <footer className="site-footer">
-        <span>Yapameet · Works best in Chrome and Edge</span>
+        <span>Yapameet · Free forever · Works best in Chrome and Edge</span>
       </footer>
     </div>
   );

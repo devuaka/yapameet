@@ -76,12 +76,13 @@ export function Modal({
   title,
   onClose,
   children,
-  wide,
+  size = 'md',
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
-  wide?: boolean;
+  /** md: small dialogs. wide: forms and previews. xl: the settings window. */
+  size?: 'md' | 'wide' | 'xl';
 }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -92,10 +93,17 @@ export function Modal({
   }, [onClose]);
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={box}>
+      <div
+        className={`modal ${size === 'wide' ? 'modal-wide' : size === 'xl' ? 'modal-xl' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        ref={box}
+      >
         <div className="modal-head">
           <h2>{title}</h2>
-          <button className="icon-btn ghost" onClick={onClose} aria-label="Close">
+          <button className="icon-btn ghost" onClick={onClose} aria-label="Close" data-testid="modal-close">
             <X size={20} />
           </button>
         </div>
@@ -103,6 +111,13 @@ export function Modal({
       </div>
     </div>
   );
+}
+
+/** A stable hue (0-359) for a name: avatars and camera-off tiles share it. */
+export function hueOf(name: string): number {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return h;
 }
 
 export function Avatar({ name, size = 72, src }: { name: string; size?: number; src?: string | null }) {
@@ -116,8 +131,7 @@ export function Avatar({ name, size = 72, src }: { name: string; size?: number; 
       .slice(0, 2)
       .map((w) => w[0]!.toUpperCase())
       .join('') || '?';
-  let h = 0;
-  for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
+  const h = hueOf(name);
   return (
     <div
       className="avatar"
@@ -125,7 +139,7 @@ export function Avatar({ name, size = 72, src }: { name: string; size?: number; 
         width: size,
         height: size,
         fontSize: size * 0.38,
-        background: `linear-gradient(135deg, hsl(${h} 70% 58%), hsl(${(h + 50) % 360} 70% 48%))`,
+        background: `linear-gradient(135deg, hsl(${h} 72% 60%), hsl(${(h + 50) % 360} 70% 46%))`,
       }}
     >
       {initials}

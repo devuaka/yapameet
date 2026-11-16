@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { SendHorizontal, Smile } from 'lucide-react';
+import { MessageSquare, SendHorizontal, Smile } from 'lucide-react';
 import { censor } from '../lib/censor';
 import { Avatar } from './controls';
 import type { ChatMessage } from '../rtc/MeetingSession';
@@ -73,7 +73,6 @@ export function ChatPanel({
 
   return (
     <div className="side-content" aria-label="Chat">
-      <p className="side-note">Messages are only seen by people in the call and disappear when you leave.</p>
       <div
         className="chat-list"
         ref={list}
@@ -83,7 +82,13 @@ export function ChatPanel({
         }}
         data-testid="chat-list"
       >
-        {messages.length === 0 && <div className="chat-empty">No messages yet. Say hi 👋</div>}
+        {messages.length === 0 && (
+          <div className="chat-empty">
+            <MessageSquare size={26} />
+            <b>No messages yet. Say hi 👋</b>
+            <span>Only people in this call can read the chat, and it's gone when you leave.</span>
+          </div>
+        )}
         {messages.map((m, i) => {
           if (m.system) {
             return (
@@ -98,12 +103,12 @@ export function ChatPanel({
             <div key={m.id} className={`chat-msg ${m.isLocal ? 'mine' : ''} ${grouped ? 'grouped' : ''}`} data-testid="chat-msg">
               {!grouped && (
                 <div className="chat-meta">
-                  <Avatar name={m.name} size={22} src={avatars[m.from]} />
+                  <Avatar name={m.name} size={20} src={avatars[m.from]} />
                   <span className="chat-name">{m.isLocal ? 'You' : m.name}</span>
                   <time>{formatTime(m.ts)}</time>
                 </div>
               )}
-              <div className="chat-text">
+              <div className="chat-text" title={formatTime(m.ts)}>
                 <Linkified text={m.text} />
               </div>
             </div>
@@ -155,7 +160,7 @@ export function ChatPanel({
           aria-label="Message"
           data-testid="chat-input"
         />
-        <button className="icon-btn" onClick={send} disabled={!text.trim() || disabled} aria-label="Send" data-testid="chat-send">
+        <button className="icon-btn chat-send" onClick={send} disabled={!text.trim() || disabled} aria-label="Send" data-testid="chat-send">
           <SendHorizontal size={18} />
         </button>
       </div>

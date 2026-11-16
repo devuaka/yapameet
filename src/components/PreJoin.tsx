@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Copy, Mic, MicOff, Settings as SettingsIcon, Sparkles, Video, VideoOff } from 'lucide-react';
+import { Check, Copy, Mic, MicOff, QrCode as QrIcon, Settings as SettingsIcon, Sparkles, Video, VideoOff } from 'lucide-react';
 import { BrandLink } from './Brand';
 import { Avatar, DeviceSelect, Modal } from './controls';
-import { AudioPanel, EffectsPanel, VideoPanel } from './SettingsPanels';
-import { PfpEditor } from './PfpEditor';
+import { SettingsView, type SettingsSection } from './SettingsPanels';
+import { QrCode } from './MeetingInfo';
 import { usePfp } from '../lib/pfp';
 import { usePeek } from '../lib/peek';
 import { GABEN_NAME, isGabenCode } from '../lib/gaben';
@@ -12,33 +12,26 @@ import { copyText, useToast } from './Toast';
 import type { LocalMedia } from '../rtc/LocalMedia';
 import { useEmitter } from '../lib/hooks';
 import { meetingUrl } from '../lib/meetingCode';
-import { useSettings } from '../lib/settings';
+import { updateSettings, useSettings } from '../lib/settings';
 import { audioLevels } from '../lib/audioLevel';
 
 const PREVIEW_ID = '__prejoin-mic';
 
-/** Waiting room: check camera/mic, pick devices, set a name, then join. */
-export function PreJoin({
-  code,
-  local,
-  defaultName,
-  onJoin,
-}: {
-  code: string;
-  local: LocalMedia;
-  defaultName: string;
-  onJoin: (name: string) => void;
-}) {
+/** The lobby: check camera and mic, set a name, invite people, then join. */
+export function PreJoin({ code, local, onJoin }: { code: string; local: LocalMedia; onJoin: (name: string) => void }) {
   useEmitter(local);
   const s = useSettings();
   const toast = useToast();
-  const [name, setName] = useState(defaultName);
-  const [showSettings, setShowSettings] = useState<null | 'audio' | 'video' | 'effects' | 'picture'>(null);
+  const name = s.displayName;
+  const [settings, setSettings] = useState<SettingsSection | null>(null);
+  const [qr, setQr] = useState(false);
+  const [copied, setCopied] = useState(false);
   const pfp = usePfp();
   const peeked = usePeek(code);
   const here = isGabenCode(code) && peeked ? [GABEN_NAME, ...peeked] : peeked;
   const mics = local.devices.filter((d) => d.kind === 'audioinput');
   const cams = local.devices.filter((d) => d.kind === 'videoinput');
+  const link = meetingUrl(code);
 
   useEffect(() => {
     audioLevels.watch(PREVIEW_ID, local.micMonitorStream);
@@ -51,17 +44,26 @@ export function PreJoin({
     if (n) onJoin(n);
   };
 
+  const copy = async () => {
+    const ok = await copyText(link);
+    toast(ok ? 'Meeting link copied' : 'Could not copy', 'success');
+    if (!ok) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  };
+
   const mediaErrors = [local.micError, local.camError].filter(Boolean);
   const bothDenied = local.micError?.kind === 'denied' && local.camError?.kind === 'denied';
   const uniqueErrors = bothDenied
     ? [
         {
           kind: 'denied' as const,
-          message:
-            'Camera and microphone access is blocked. Click the lock/camera icon in the address bar, allow both, then try again.',
+          message: 'Camera and microphone access is blocked. Click the lock/camera icon in the address bar, allow both, then try again.',
         },
       ]
     : [...new Map(mediaErrors.map((e) => [e!.message, e!])).values()];
+  const micOn = local.micOn && !!local.mic;
+  const fxOn = s.bgEffect !== 'none' || s.filter !== 'none' || s.lowLightBoost || s.sticker !== 'none';
 
   return (
     <div className="page prejoin-page">
@@ -70,29 +72,33 @@ export function PreJoin({
         <BrandLink />
       </header>
       <main className="prejoin">
-        <div className="prejoin-preview">
+        <section className="prejoin-preview">
           <div className="preview-stage">
             {local.camStream ? (
               <VideoView stream={local.camStream} mirror={s.mirrorSelf} testId="prejoin-video" />
             ) : (
               <div className="preview-off">
-                <button type="button" className="pfp-hit" onClick={() => setShowSettings('picture')} title="Change profile picture" data-testid="prejoin-pfp">
-                  <Avatar name={name || 'You'} size={96} src={pfp} />
+                <button type="button" className="pfp-hit" onClick={() => setSettings('profile')} title="Change profile picture" data-testid="prejoin-pfp">
+                  <Avatar name={name || 'You'} size={104} src={pfp} />
                 </button>
-                <span className="muted">{local.camStarting ? 'Starting camera…' : 'Camera is off'}</span>
+                <span>{local.camStarting ? 'Starting camera…' : 'Camera is off'}</span>
               </div>
             )}
-            <div className="preview-name">{name || 'You'}</div>
+            <div className="preview-name">
+              {micOn && <LevelMeter id={PREVIEW_ID} bars={5} />}
+              {!micOn && <MicOff size={14} />}
+              <span>{name || 'You'}</span>
+            </div>
             <div className="preview-controls">
               <button
                 type="button"
-                className={`round-btn ${local.micOn && local.mic ? '' : 'off'}`}
+                className={`round-btn ${micOn ? '' : 'off'}`}
                 onClick={() => local.setMicOn(!local.micOn)}
                 aria-label={local.micOn ? 'Mute microphone' : 'Unmute microphone'}
                 title={local.micOn ? 'Mute' : 'Unmute'}
                 data-testid="prejoin-mic"
               >
-                {local.micOn && local.mic ? <Mic size={22} /> : <MicOff size={22} />}
+                {micOn ? <Mic size={22} /> : <MicOff size={22} />}
               </button>
               <button
                 type="button"
@@ -106,63 +112,57 @@ export function PreJoin({
               </button>
               <button
                 type="button"
-                className={`round-btn ${s.bgEffect !== 'none' || s.filter !== 'none' || s.lowLightBoost ? 'fx-on' : ''}`}
-                onClick={() => setShowSettings('effects')}
-                aria-label="Backgrounds and filters"
-                title="Backgrounds & filters"
+                className={`round-btn ${fxOn ? 'fx-on' : ''}`}
+                onClick={() => setSettings('effects')}
+                aria-label="Backgrounds and effects"
+                title="Backgrounds & effects"
                 data-testid="prejoin-effects"
               >
                 <Sparkles size={22} />
               </button>
-              <button type="button" className="round-btn" onClick={() => setShowSettings('audio')} aria-label="Device settings" title="Settings">
+              <button type="button" className="round-btn" onClick={() => setSettings('audio')} aria-label="Settings" title="Settings" data-testid="prejoin-settings">
                 <SettingsIcon size={22} />
               </button>
             </div>
-            {local.mic && local.micOn && (
-              <div className="preview-meter">
-                <LevelMeter id={PREVIEW_ID} />
-              </div>
-            )}
           </div>
           <div className="prejoin-devices">
             <DeviceSelect label="Microphone" icon={<Mic size={16} />} devices={mics} value={local.micId} onChange={(id) => void local.switchMic(id)} emptyText="No microphone" />
             <DeviceSelect label="Camera" icon={<Video size={16} />} devices={cams} value={local.camId} onChange={(id) => void local.switchCam(id)} emptyText="No camera" />
           </div>
-        </div>
+        </section>
 
-        <form className="prejoin-side" onSubmit={submit}>
+        <form className="prejoin-side card" onSubmit={submit}>
+          <span className="eyebrow mono">{code}</span>
           <h1>Ready to join?</h1>
-          <p className="here-line" data-testid="whos-here">
-            {here === null ? (
-              <span className="muted">Checking who's here…</span>
-            ) : here.length === 0 ? (
-              <span className="muted">No one else is here yet</span>
-            ) : (
-              <>
-                <span className="here-dot" />
-                {here.length === 1
-                  ? `${here[0]} is in this call`
-                  : here.length === 2
-                    ? `${here[0]} and ${here[1]} are in this call`
-                    : `${here.slice(0, 2).join(', ')} and ${here.length - 2} more are in this call`}
-              </>
+          <div className="here-line">
+            {here && here.length > 0 && (
+              <span className="here-avatars" aria-hidden="true">
+                {here.slice(0, 4).map((n, i) => (
+                  <Avatar key={`${n}-${i}`} name={n} size={26} />
+                ))}
+              </span>
             )}
-          </p>
-          <button
-            type="button"
-            className="code-chip"
-            onClick={async () => toast((await copyText(meetingUrl(code))) ? 'Meeting link copied' : 'Could not copy', 'success')}
-            title="Copy meeting link"
-          >
-            <span className="mono">{code}</span> <Copy size={14} />
-          </button>
+            <span data-testid="whos-here">
+              {here === null ? (
+                <span className="muted">Checking who's here…</span>
+              ) : here.length === 0 ? (
+                <span className="muted">No one else is here yet</span>
+              ) : here.length === 1 ? (
+                `${here[0]} is in this call`
+              ) : here.length === 2 ? (
+                `${here[0]} and ${here[1]} are in this call`
+              ) : (
+                `${here.slice(0, 2).join(', ')} and ${here.length - 2} more are in this call`
+              )}
+            </span>
+          </div>
           <label className="field">
             <span>Your name</span>
             <input
               autoFocus
               value={name}
-              onChange={(e) => setName(e.target.value.slice(0, 40))}
-              placeholder="Enter your name"
+              onChange={(e) => updateSettings({ displayName: e.target.value.slice(0, 40) })}
+              placeholder="What should people call you?"
               maxLength={40}
               required
               data-testid="name-input"
@@ -179,27 +179,36 @@ export function PreJoin({
             </div>
           ))}
           {uniqueErrors.length > 0 && <p className="muted small">You can still join and listen, watch and chat.</p>}
-          <button className="btn btn-primary btn-lg" type="submit" disabled={!name.trim()} data-testid="join-button">
+          <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={!name.trim()} data-testid="join-button">
             Join now
           </button>
-          <p className="muted small">
-            Anyone with the link can join. Video and audio go directly between participants, encrypted.
-          </p>
+
+          <div className="invite">
+            <span className="invite-title">Invite people</span>
+            <div className="link-box">
+              <span className="link-text" data-testid="invite-link">
+                {link}
+              </span>
+              <button type="button" className="icon-btn" onClick={() => void copy()} aria-label="Copy meeting link" title="Copy link" data-testid="invite-copy">
+                {copied ? <Check size={16} /> : <Copy size={16} />}
+              </button>
+              <button type="button" className={`icon-btn ${qr ? '' : 'ghost'}`} onClick={() => setQr((v) => !v)} aria-label="Show QR code" title="QR code for phones" data-testid="invite-qr">
+                <QrIcon size={16} />
+              </button>
+            </div>
+            {qr && (
+              <div className="invite-qr">
+                <QrCode text={link} size={116} testId="invite-qr-img" />
+                <span className="muted small">Scan with a phone camera to join from there.</span>
+              </div>
+            )}
+          </div>
+          <p className="muted small prejoin-note">Anyone with the link can join. Video and audio go directly between people, encrypted.</p>
         </form>
       </main>
-      {showSettings && (
-        <Modal title="Settings" onClose={() => setShowSettings(null)} wide>
-          <div className="tabs" role="tablist">
-            {(['audio', 'video', 'effects', 'picture'] as const).map((t) => (
-              <button key={t} role="tab" aria-selected={showSettings === t} className={showSettings === t ? 'active' : ''} onClick={() => setShowSettings(t)}>
-                {t === 'effects' ? 'Backgrounds & filters' : t === 'picture' ? 'Profile picture' : t[0].toUpperCase() + t.slice(1)}
-              </button>
-            ))}
-          </div>
-          {showSettings === 'audio' && <AudioPanel local={local} />}
-          {showSettings === 'video' && <VideoPanel local={local} />}
-          {showSettings === 'effects' && <EffectsPanel local={local} />}
-          {showSettings === 'picture' && <PfpEditor name={name} track={local.rawCam} />}
+      {settings && (
+        <Modal title="Settings" onClose={() => setSettings(null)} size="xl">
+          <SettingsView local={local} section={settings} onSection={setSettings} />
         </Modal>
       )}
     </div>

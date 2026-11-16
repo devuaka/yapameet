@@ -5,7 +5,7 @@ import { meetingUrl } from '../lib/meetingCode';
 import { copyText, useToast } from './Toast';
 
 /** QR code for a link, rendered locally (no third-party image service). */
-export function QrCode({ text, size = 168 }: { text: string; size?: number }) {
+export function QrCode({ text, size = 168, testId = 'qr' }: { text: string; size?: number; testId?: string }) {
   const [src, setSrc] = useState('');
   useEffect(() => {
     let alive = true;
@@ -16,7 +16,7 @@ export function QrCode({ text, size = 168 }: { text: string; size?: number }) {
       alive = false;
     };
   }, [text, size]);
-  return src ? <img className="qr" src={src} alt="QR code for the meeting link" width={size} height={size} data-testid="qr" /> : <div className="qr qr-empty" style={{ width: size, height: size }} />;
+  return src ? <img className="qr" src={src} alt="QR code for the meeting link" width={size} height={size} data-testid={testId} /> : <div className="qr qr-empty" style={{ width: size, height: size }} />;
 }
 
 /** Popover with everything needed to invite someone. */

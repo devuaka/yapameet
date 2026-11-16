@@ -1,32 +1,113 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ImagePlus, Lock, Mic, Speaker, Video, Volume2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Check, Egg, ImagePlus, Lock, Mic, Palette, RotateCcw, SlidersHorizontal, Sparkles, Speaker, User, Video, Volume2, X } from 'lucide-react';
 import type { LocalMedia } from '../rtc/LocalMedia';
+import type { MeetingSession } from '../rtc/MeetingSession';
 import { useEmitter } from '../lib/hooks';
-import {
-  QUALITY,
-  updateSettings,
-  useSettings,
-  type CodecPref,
-  type FilterId,
-  type LayoutPref,
-  type Settings,
-  type VideoQuality,
-  type VoiceFx,
-} from '../lib/settings';
+import { QUALITY, resetSettings, updateSettings, useSettings, type CodecPref, type FilterId, type Settings, type VideoQuality } from '../lib/settings';
 import { setSoundsSink, sounds } from '../lib/sounds';
 import { audioLevels } from '../lib/audioLevel';
 import { BG_PRESETS, MAX_CUSTOM, addCustomBg, getCustomBgs, presetThumb, removeCustomBg } from '../lib/backgrounds';
 import { FILTERS, cssFilterFor } from '../rtc/effects';
 import { supportedCodecs } from '../rtc/tuning';
-import { VOICES } from '../rtc/voice';
 import { STICKERS } from '../rtc/faceStickers';
 import { captionsSupported } from '../rtc/captions';
 import { EGGS, THEMES } from '../lib/themes';
 import { DeviceSelect, Toggle } from './controls';
 import { LevelMeter, VideoView, supportsSinkSelection } from './media';
+import { PfpEditor } from './PfpEditor';
 import { useToast } from './Toast';
 
 const METER_ID = '__settings-mic';
+
+export type SettingsSection = 'profile' | 'appearance' | 'audio' | 'video' | 'effects' | 'calls' | 'secrets';
+
+const GROUPS: { title: string; items: { id: SettingsSection; label: string; title?: string; icon: ReactNode }[] }[] = [
+  {
+    title: 'You',
+    items: [
+      { id: 'profile', label: 'Profile', icon: <User size={18} /> },
+      { id: 'appearance', label: 'Appearance', icon: <Palette size={18} /> },
+    ],
+  },
+  {
+    title: 'Devices',
+    items: [
+      { id: 'audio', label: 'Audio', icon: <Mic size={18} /> },
+      { id: 'video', label: 'Video', icon: <Video size={18} /> },
+      { id: 'effects', label: 'Effects', title: 'Backgrounds & effects', icon: <Sparkles size={18} /> },
+    ],
+  },
+  {
+    title: 'More',
+    items: [
+      { id: 'calls', label: 'Calls', icon: <SlidersHorizontal size={18} /> },
+      { id: 'secrets', label: 'Secrets', icon: <Egg size={18} /> },
+    ],
+  },
+];
+export const SETTINGS_SECTIONS = GROUPS.flatMap((g) => g.items);
+
+/** Which sections need the camera or microphone running to be useful. */
+export const sectionNeedsDevices = (s: SettingsSection) => s === 'audio' || s === 'video' || s === 'effects';
+
+/**
+ * The whole settings UI: section list on the left, the chosen section on the right.
+ * Used by the Settings page and by the settings window inside a call or the lobby.
+ */
+export function SettingsView({
+  local,
+  section,
+  onSection,
+  session,
+}: {
+  local: LocalMedia;
+  section: SettingsSection;
+  onSection: (s: SettingsSection) => void;
+  /** Set while in a call: a name change is announced to everyone. */
+  session?: MeetingSession;
+}) {
+  const s = useSettings();
+  const current = SETTINGS_SECTIONS.find((x) => x.id === section) ?? SETTINGS_SECTIONS[0];
+  return (
+    <div className="settings" data-testid="settings-view" data-section={current.id}>
+      <nav className="settings-nav" aria-label="Settings sections" role="tablist">
+        {GROUPS.map((g) => (
+          <div className="settings-nav-group" key={g.title}>
+            <div className="settings-nav-title">{g.title}</div>
+            {g.items.map((x) => (
+              <button
+                key={x.id}
+                role="tab"
+                aria-selected={current.id === x.id}
+                className={current.id === x.id ? 'active' : ''}
+                onClick={() => onSection(x.id)}
+                data-testid={`section-${x.id}`}
+              >
+                {x.icon}
+                <span>{x.label}</span>
+                {x.id === 'secrets' && (
+                  <span className="nav-count">
+                    {s.eggs.length}/{EGGS.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <div className="settings-body" key={current.id}>
+        <h2 className="settings-title">{current.title ?? current.label}</h2>
+        {current.id === 'profile' && <ProfilePanel local={local} session={session} />}
+        {current.id === 'appearance' && <AppearancePanel />}
+        {current.id === 'audio' && <AudioPanel local={local} />}
+        {current.id === 'video' && <VideoPanel local={local} />}
+        {current.id === 'effects' && <EffectsPanel local={local} />}
+        {current.id === 'calls' && <CallsPanel session={session} />}
+        {current.id === 'secrets' && <SecretsPanel />}
+      </div>
+    </div>
+  );
+}
 
 function Select<T extends string>({
   label,
@@ -71,9 +152,106 @@ function PermissionNotice({ local }: { local: LocalMedia }) {
   );
 }
 
+// ---------------------------------------------------------------- profile
+
+function ProfilePanel({ local, session }: { local: LocalMedia; session?: MeetingSession }) {
+  useEmitter(local);
+  const s = useSettings();
+  const toast = useToast();
+  const [draft, setDraft] = useState(s.displayName);
+  return (
+    <div className="panel">
+      <section className="panel-section">
+        <h3>Name</h3>
+        {session ? (
+          <div className="row-with-button">
+            <input value={draft} maxLength={40} onChange={(e) => setDraft(e.target.value)} aria-label="Display name" data-testid="settings-name" />
+            <button
+              className="btn"
+              disabled={!draft.trim() || draft.trim() === s.displayName}
+              onClick={() => {
+                session.setName(draft);
+                updateSettings({ displayName: draft.trim() });
+                toast('Name updated', 'success');
+              }}
+            >
+              Save
+            </button>
+          </div>
+        ) : (
+          <input
+            value={s.displayName}
+            onChange={(e) => updateSettings({ displayName: e.target.value.slice(0, 40) })}
+            placeholder="What should people call you?"
+            maxLength={40}
+            aria-label="Display name"
+            data-testid="settings-name"
+          />
+        )}
+      </section>
+      <section className="panel-section">
+        <h3>Picture</h3>
+        <PfpEditor name={s.displayName} track={local.rawCam} />
+      </section>
+      <section className="panel-section">
+        <h3>Reset</h3>
+        <p className="muted small">Puts every setting back to its default. Your name, picture and found secrets are kept.</p>
+        <button
+          className="btn btn-ghost"
+          onClick={() => {
+            resetSettings();
+            toast('Settings reset', 'success');
+          }}
+        >
+          <RotateCcw size={16} /> Reset all settings
+        </button>
+      </section>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- appearance
+
+function AppearancePanel() {
+  const s = useSettings();
+  return (
+    <div className="panel">
+      <section className="panel-section">
+        <h3>Theme</h3>
+        <div className="theme-grid" data-testid="theme-grid">
+          {THEMES.map((t) => {
+            const locked = !!t.secret && !s.eggs.includes(t.secret);
+            return (
+              <button
+                key={t.id}
+                className={`theme-opt ${s.theme === t.id ? 'sel' : ''} ${locked ? 'locked' : ''}`}
+                onClick={() => !locked && updateSettings({ theme: t.id })}
+                disabled={locked}
+                title={locked ? 'Secret theme. Find its easter egg to unlock.' : t.label}
+                data-testid={`theme-${t.id}`}
+              >
+                <span className="theme-swatch" style={{ background: t.colors[0] }}>
+                  <i style={{ background: `linear-gradient(135deg, ${t.colors[1]}, ${t.colors[2]})` }} />
+                  {locked && <Lock size={14} />}
+                  {s.theme === t.id && <Check size={14} />}
+                </span>
+                <span>{locked ? '???' : t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+      <section className="panel-section">
+        <h3>Motion</h3>
+        <Toggle label="Reduce motion" hint="Turns off animations and screen effects" checked={s.reduceMotion} onChange={(v) => updateSettings({ reduceMotion: v })} />
+      </section>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- audio
 
-export function AudioPanel({ local }: { local: LocalMedia }) {
+function AudioPanel({ local }: { local: LocalMedia }) {
   useEmitter(local);
   const s = useSettings();
   const [busy, setBusy] = useState(false);
@@ -93,7 +271,7 @@ export function AudioPanel({ local }: { local: LocalMedia }) {
   };
 
   return (
-    <div className="device-panel">
+    <div className="panel">
       <PermissionNotice local={local} />
       <section className="panel-section">
         <h3>Microphone</h3>
@@ -106,7 +284,7 @@ export function AudioPanel({ local }: { local: LocalMedia }) {
           emptyText="No microphone found"
           testId="mic-select"
         />
-        {local.micError ? <p className="error-text">{local.micError.message}</p> : <LevelMeter id={METER_ID} bars={18} />}
+        {local.micError ? <p className="error-text">{local.micError.message}</p> : <LevelMeter id={METER_ID} bars={22} />}
         <Toggle label="Noise suppression" checked={s.noiseSuppression} onChange={(v) => void setProcessing({ noiseSuppression: v })} />
         <Toggle
           label="Echo cancellation"
@@ -115,13 +293,6 @@ export function AudioPanel({ local }: { local: LocalMedia }) {
           onChange={(v) => void setProcessing({ echoCancellation: v })}
         />
         <Toggle label="Automatic gain control" checked={s.autoGainControl} onChange={(v) => void setProcessing({ autoGainControl: v })} />
-        <Select<VoiceFx>
-          label="Voice changer"
-          value={s.voiceFx}
-          onChange={(v) => updateSettings({ voiceFx: v })}
-          options={VOICES.map((v) => ({ value: v.id, label: `${v.emoji} ${v.label}` }))}
-          hint="Everyone hears the changed voice"
-        />
         {busy && <p className="muted small">Applying…</p>}
       </section>
       <section className="panel-section">
@@ -140,16 +311,19 @@ export function AudioPanel({ local }: { local: LocalMedia }) {
               emptyText="Default speakers"
               testId="speaker-select"
             />
-            <button className="btn btn-small btn-ghost" onClick={() => sounds.test()}>
+            <button className="btn btn-ghost" onClick={() => sounds.test()}>
               <Volume2 size={16} /> Test
             </button>
           </div>
         ) : (
           <p className="muted small">This browser uses the system default speakers (output selection needs Chrome or Edge).</p>
         )}
-        <Toggle label="Join, leave & message sounds" checked={s.sounds} onChange={(v) => updateSettings({ sounds: v })} />
+      </section>
+      <section className="panel-section">
+        <h3>Sounds</h3>
+        <Toggle label="Join, leave and message sounds" checked={s.sounds} onChange={(v) => updateSettings({ sounds: v })} />
         <label className="field range-field">
-          <span>Sound effects volume · {Math.round(s.soundVolume * 100)}%</span>
+          <span>Volume · {Math.round(s.soundVolume * 100)}%</span>
           <input
             type="range"
             min={0}
@@ -167,7 +341,7 @@ export function AudioPanel({ local }: { local: LocalMedia }) {
 
 // ---------------------------------------------------------------- video
 
-export function VideoPanel({ local }: { local: LocalMedia }) {
+function VideoPanel({ local }: { local: LocalMedia }) {
   useEmitter(local);
   const s = useSettings();
   const cams = local.devices.filter((d) => d.kind === 'videoinput');
@@ -180,19 +354,10 @@ export function VideoPanel({ local }: { local: LocalMedia }) {
     av1: 'AV1 (best quality per bit, heavy)',
   };
   return (
-    <div className="device-panel">
+    <div className="panel">
       <PermissionNotice local={local} />
       <section className="panel-section">
         <h3>Camera</h3>
-        <DeviceSelect
-          label="Camera"
-          icon={<Video size={16} />}
-          devices={cams}
-          value={local.camId}
-          onChange={(id) => void local.switchCam(id)}
-          emptyText="No camera found"
-          testId="cam-select"
-        />
         <div className="preview-box">
           {local.camStream ? (
             <VideoView stream={local.camStream} mirror={s.mirrorSelf} />
@@ -207,18 +372,30 @@ export function VideoPanel({ local }: { local: LocalMedia }) {
             </div>
           )}
         </div>
+        <DeviceSelect
+          label="Camera"
+          icon={<Video size={16} />}
+          devices={cams}
+          value={local.camId}
+          onChange={(id) => void local.switchCam(id)}
+          emptyText="No camera found"
+          testId="cam-select"
+        />
         <Toggle label="Mirror my video" hint="Only changes how you see yourself" checked={s.mirrorSelf} onChange={(v) => updateSettings({ mirrorSelf: v })} />
       </section>
       <section className="panel-section">
-        <h3>Quality & latency</h3>
+        <h3>Quality</h3>
         <Select<VideoQuality>
           label="Send quality"
           value={s.videoQuality}
           onChange={(v) => updateSettings({ videoQuality: v })}
           options={(Object.keys(QUALITY) as VideoQuality[]).map((k) => ({ value: k, label: QUALITY[k].label }))}
-          hint="Higher needs a faster upload. In bigger calls Yapameet automatically splits your bandwidth between people."
+          hint="Higher needs a faster upload. In bigger calls your bandwidth is split between people automatically."
           testId="quality-select"
         />
+      </section>
+      <section className="panel-section">
+        <h3>Advanced</h3>
         <Select<CodecPref>
           label="Video codec"
           value={codecs.includes(s.codec) ? s.codec : 'auto'}
@@ -238,9 +415,9 @@ export function VideoPanel({ local }: { local: LocalMedia }) {
   );
 }
 
-// ---------------------------------------------------------------- effects
+// ---------------------------------------------------------------- backgrounds & effects
 
-export function EffectsPanel({ local }: { local: LocalMedia }) {
+function EffectsPanel({ local }: { local: LocalMedia }) {
   useEmitter(local);
   const s = useSettings();
   const toast = useToast();
@@ -248,7 +425,6 @@ export function EffectsPanel({ local }: { local: LocalMedia }) {
   const [customs, setCustoms] = useState(getCustomBgs);
   const thumbs = useMemo(() => BG_PRESETS.map((p) => ({ id: `preset:${p.id}`, label: p.label, src: presetThumb(p) })), []);
   const rawStream = useMemo(() => (local.rawCam ? new MediaStream([local.rawCam]) : null), [local.rawCam]);
-  const previewFilter = cssFilterFor({ filter: s.filter, lowLight: s.lowLightBoost });
 
   const pickBg = (bgEffect: Settings['bgEffect'], bgImage?: string) => updateSettings({ bgEffect, ...(bgImage ? { bgImage } : {}) });
 
@@ -270,14 +446,20 @@ export function EffectsPanel({ local }: { local: LocalMedia }) {
   const isSel = (effect: Settings['bgEffect'], image?: string) => s.bgEffect === effect && (!image || s.bgImage === image);
 
   return (
-    <div className="device-panel">
+    <div className="panel">
       <section className="panel-section">
-        <h3>Preview</h3>
         <div className="preview-box">
           {local.camStream ? (
             <VideoView stream={local.camStream} mirror={s.mirrorSelf} />
           ) : (
-            <div className="preview-empty">Turn your camera on to preview effects.</div>
+            <div className="preview-empty">
+              Turn your camera on to preview effects.
+              {!local.camStarting && (
+                <button className="btn btn-small" onClick={() => void local.setCamOn(true)}>
+                  Turn on camera
+                </button>
+              )}
+            </div>
           )}
         </div>
         {local.effectsError && <p className="error-text">{local.effectsError}</p>}
@@ -316,8 +498,7 @@ export function EffectsPanel({ local }: { local: LocalMedia }) {
                 className="bg-del"
                 onClick={() => {
                   removeCustomBg(i);
-                  const next = getCustomBgs();
-                  setCustoms(next);
+                  setCustoms(getCustomBgs());
                   if (s.bgImage.startsWith('custom:')) pickBg(s.bgEffect === 'image' ? 'none' : s.bgEffect, 'preset:aurora');
                 }}
                 aria-label="Delete background"
@@ -362,6 +543,9 @@ export function EffectsPanel({ local }: { local: LocalMedia }) {
             </button>
           ))}
         </div>
+      </section>
+      <section className="panel-section">
+        <h3>Camera helpers</h3>
         <Toggle
           label="Auto-framing"
           hint="Zooms in and follows you so you stay centered"
@@ -369,80 +553,54 @@ export function EffectsPanel({ local }: { local: LocalMedia }) {
           onChange={(v) => updateSettings({ autoFrame: v })}
           testId="auto-frame"
         />
-        <Toggle
-          label="Low-light boost"
-          hint="Brightens dim rooms"
-          checked={s.lowLightBoost}
-          onChange={(v) => updateSettings({ lowLightBoost: v })}
-        />
-        {previewFilter !== 'none' && <p className="muted small">Filters are applied to the video everyone sees.</p>}
+        <Toggle label="Low-light boost" hint="Brightens dim rooms" checked={s.lowLightBoost} onChange={(v) => updateSettings({ lowLightBoost: v })} />
       </section>
     </div>
   );
 }
 
-// ---------------------------------------------------------------- appearance
+// ---------------------------------------------------------------- calls
 
-export function AppearancePanel() {
-  const s = useSettings();
+const CAPTION_LANGS: [string, string][] = [
+  ['en-US', 'English (US)'],
+  ['en-GB', 'English (UK)'],
+  ['es-ES', 'Español'],
+  ['fr-FR', 'Français'],
+  ['de-DE', 'Deutsch'],
+  ['it-IT', 'Italiano'],
+  ['pt-BR', 'Português (BR)'],
+  ['nl-NL', 'Nederlands'],
+  ['pl-PL', 'Polski'],
+  ['tr-TR', 'Türkçe'],
+  ['ru-RU', 'Русский'],
+  ['hi-IN', 'हिन्दी'],
+  ['ja-JP', '日本語'],
+  ['ko-KR', '한국어'],
+  ['zh-CN', '中文'],
+];
+
+function ConnectionLine({ session }: { session: MeetingSession }) {
+  const snap = useSyncExternalStore(session.subscribe, session.getSnapshot);
   return (
-    <div className="device-panel">
-      <section className="panel-section">
-        <h3>Theme</h3>
-        <div className="theme-grid" data-testid="theme-grid">
-          {THEMES.map((t) => {
-            const locked = !!t.secret && !s.eggs.includes(t.secret);
-            return (
-              <button
-                key={t.id}
-                className={`theme-opt ${s.theme === t.id ? 'sel' : ''} ${locked ? 'locked' : ''}`}
-                onClick={() => !locked && updateSettings({ theme: t.id })}
-                disabled={locked}
-                title={locked ? 'Secret theme. Find its easter egg to unlock.' : t.label}
-                data-testid={`theme-${t.id}`}
-              >
-                <span
-                  className="theme-swatch"
-                  style={{ background: `linear-gradient(135deg, ${t.colors[1]}, ${t.colors[2]})`, boxShadow: `inset 0 0 0 6px ${t.colors[0]}` }}
-                >
-                  {locked && <Lock size={16} />}
-                  {s.theme === t.id && <Check size={16} />}
-                </span>
-                <span>{locked ? '???' : t.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-      <section className="panel-section">
-        <h3>Interface</h3>
-        <Toggle label="Reduce motion" hint="Turns off animations and screen effects" checked={s.reduceMotion} onChange={(v) => updateSettings({ reduceMotion: v })} />
-        <Toggle label="Show clock in calls" checked={s.showClock} onChange={(v) => updateSettings({ showClock: v })} />
-        <Toggle label="Compact tiles" hint="Smaller gaps and corners, more video" checked={s.compactTiles} onChange={(v) => updateSettings({ compactTiles: v })} />
-      </section>
-    </div>
+    <p className="muted small">
+      Signaling: {snap.transport || 'starting'} ({snap.signal}
+      {snap.signalDetail ? `, ${snap.signalDetail}` : ''}). Video and audio go directly between people.
+    </p>
   );
 }
 
-// ---------------------------------------------------------------- meeting
-
-export function MeetingPanel() {
+function CallsPanel({ session }: { session?: MeetingSession }) {
   const s = useSettings();
   return (
-    <div className="device-panel">
+    <div className="panel">
       <section className="panel-section">
-        <h3>Layout</h3>
-        <Select<LayoutPref>
-          label="Video layout"
-          value={s.layout}
-          onChange={(v) => updateSettings({ layout: v })}
-          options={[
-            { value: 'auto', label: 'Auto (smart)' },
-            { value: 'grid', label: 'Grid (everyone the same size)' },
-            { value: 'speaker', label: 'Speaker (whoever talks is big)' },
-          ]}
-          testId="layout-select"
-        />
+        <h3>When you join</h3>
+        <Toggle label="Join with microphone muted" checked={s.joinMuted} onChange={(v) => updateSettings({ joinMuted: v })} />
+        <Toggle label="Join with camera off" checked={s.joinCameraOff} onChange={(v) => updateSettings({ joinCameraOff: v })} />
+      </section>
+      <section className="panel-section">
+        <h3>During calls</h3>
+        <Toggle label="Push to talk" hint="While muted, hold Space to talk" checked={s.pushToTalk} onChange={(v) => updateSettings({ pushToTalk: v })} />
         <Toggle label="Hide my own video" hint="Others still see you" checked={s.hideSelfView} onChange={(v) => updateSettings({ hideSelfView: v })} />
         <Toggle
           label="Mini player when I switch tabs"
@@ -450,90 +608,93 @@ export function MeetingPanel() {
           checked={s.autoMiniPlayer}
           onChange={(v) => updateSettings({ autoMiniPlayer: v })}
         />
-        <Toggle label="Floating reactions" checked={s.reactionsFloat} onChange={(v) => updateSettings({ reactionsFloat: v })} />
         <Toggle
-          label="Show connection stats on tiles"
-          hint="Resolution, fps, bitrate, delay and codec"
-          checked={s.showConnectionDetails}
-          onChange={(v) => updateSettings({ showConnectionDetails: v })}
+          label="Filter swear words"
+          hint="Shows f*** instead in chat, captions and polls (only on your screen)"
+          checked={s.censorSwears}
+          onChange={(v) => updateSettings({ censorSwears: v })}
+          testId="censor-toggle"
         />
       </section>
       <section className="panel-section">
-        <h3>Microphone behaviour</h3>
-        <Toggle label="Join with microphone muted" checked={s.joinMuted} onChange={(v) => updateSettings({ joinMuted: v })} />
-        <Toggle label="Join with camera off" checked={s.joinCameraOff} onChange={(v) => updateSettings({ joinCameraOff: v })} />
-        <Toggle label="Push to talk" hint="While muted, hold Space to talk" checked={s.pushToTalk} onChange={(v) => updateSettings({ pushToTalk: v })} />
+        <h3>Captions</h3>
         <Toggle
           label="Share my captions"
           hint={
             captionsSupported()
-              ? "When someone turns on captions, your browser transcribes your mic (Chrome/Edge use their speech service for this)"
+              ? 'When someone turns on captions, your browser transcribes your mic (Chrome and Edge use their speech service for this)'
               : 'Live captions need Chrome or Edge'
           }
           checked={s.shareCaptions}
           onChange={(v) => updateSettings({ shareCaptions: v })}
         />
         <Select<string>
-          label="Caption language (your speech)"
+          label="Language you speak"
           value={s.captionsLang}
           onChange={(v) => updateSettings({ captionsLang: v })}
-          options={[
-            { value: '', label: `Browser default (${navigator.language})` },
-            ...[
-              ['en-US', 'English (US)'],
-              ['en-GB', 'English (UK)'],
-              ['es-ES', 'Español'],
-              ['fr-FR', 'Français'],
-              ['de-DE', 'Deutsch'],
-              ['it-IT', 'Italiano'],
-              ['pt-BR', 'Português (BR)'],
-              ['nl-NL', 'Nederlands'],
-              ['pl-PL', 'Polski'],
-              ['tr-TR', 'Türkçe'],
-              ['ru-RU', 'Русский'],
-              ['hi-IN', 'हिन्दी'],
-              ['ja-JP', '日本語'],
-              ['ko-KR', '한국어'],
-              ['zh-CN', '中文'],
-            ].map(([value, label]) => ({ value, label })),
-          ]}
+          options={[{ value: '', label: `Browser default (${navigator.language})` }, ...CAPTION_LANGS.map(([value, label]) => ({ value, label }))]}
         />
+      </section>
+      <section className="panel-section">
+        <h3>Advanced</h3>
         <Toggle
-          label="Filter swear words"
-          hint="Shows f*** instead in chat, captions, polls and transcripts (only on your screen)"
-          checked={s.censorSwears}
-          onChange={(v) => updateSettings({ censorSwears: v })}
-          testId="censor-toggle"
+          label="Connection stats on tiles"
+          hint="Resolution, frame rate, bitrate, delay and codec for each person"
+          checked={s.showConnectionDetails}
+          onChange={(v) => updateSettings({ showConnectionDetails: v })}
+          testId="stats-toggle"
         />
-        <Toggle label="Warn me when I talk while muted" checked={s.mutedWarning} onChange={(v) => updateSettings({ mutedWarning: v })} />
+        {session && <ConnectionLine session={session} />}
       </section>
       <section className="panel-section">
         <h3>Keyboard shortcuts</h3>
-        <ul className="shortcuts">
-          <li><kbd>Ctrl</kbd>+<kbd>D</kbd> Mute / unmute</li>
-          <li><kbd>Ctrl</kbd>+<kbd>E</kbd> Camera on / off</li>
-          <li><kbd>Space</kbd> (hold, while muted) Push to talk</li>
-          <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> Raise / lower hand</li>
-          <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd> Open chat</li>
-          <li><kbd>1</kbd>-<kbd>9</kbd> Soundboard pads (Tools open)</li>
-          <li><kbd>?</kbd> Show shortcuts in a call</li>
-          <li><kbd>Esc</kbd> Close panels</li>
-        </ul>
+        <ShortcutList />
       </section>
     </div>
   );
 }
 
+export function ShortcutList() {
+  return (
+    <ul className="shortcuts" data-testid="shortcuts">
+      <li>
+        <kbd>Ctrl</kbd>+<kbd>D</kbd> Mute / unmute
+      </li>
+      <li>
+        <kbd>Ctrl</kbd>+<kbd>E</kbd> Camera on / off
+      </li>
+      <li>
+        <kbd>Space</kbd> (hold, while muted) Push to talk
+      </li>
+      <li>
+        <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> Raise / lower hand
+      </li>
+      <li>
+        <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd> Open chat
+      </li>
+      <li>
+        <kbd>1</kbd>-<kbd>9</kbd> Soundboard pads (while the soundboard is open)
+      </li>
+      <li>
+        <kbd>?</kbd> Show this list in a call
+      </li>
+      <li>
+        <kbd>Esc</kbd> Close menus and windows
+      </li>
+    </ul>
+  );
+}
+
 // ---------------------------------------------------------------- secrets
 
-export function SecretsPanel() {
+function SecretsPanel() {
   const s = useSettings();
   const found = EGGS.filter((e) => s.eggs.includes(e.id)).length;
   return (
-    <div className="device-panel">
+    <div className="panel">
       <section className="panel-section">
         <h3>
-          Secrets found · {found}/{EGGS.length}
+          Found {found} of {EGGS.length}
         </h3>
         <div className="egg-progress">
           <span style={{ width: `${(found / EGGS.length) * 100}%` }} />

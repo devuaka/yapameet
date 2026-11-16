@@ -50,8 +50,6 @@ export interface Settings {
   // appearance
   theme: ThemeId;
   reduceMotion: boolean;
-  showClock: boolean;
-  compactTiles: boolean;
   // video
   videoQuality: VideoQuality;
   codec: CodecPref;
@@ -64,8 +62,6 @@ export interface Settings {
   layout: LayoutPref;
   hideSelfView: boolean;
   pushToTalk: boolean;
-  mutedWarning: boolean;
-  reactionsFloat: boolean;
   soundboardVolume: number;
   autoMiniPlayer: boolean;
   shareCaptions: boolean;
@@ -96,8 +92,6 @@ export const defaultSettings: Settings = {
   showConnectionDetails: false,
   theme: 'midnight',
   reduceMotion: false,
-  showClock: true,
-  compactTiles: false,
   videoQuality: 'hd',
   codec: 'auto',
   lowLatency: true,
@@ -108,8 +102,6 @@ export const defaultSettings: Settings = {
   layout: 'auto',
   hideSelfView: false,
   pushToTalk: true,
-  mutedWarning: true,
-  reactionsFloat: true,
   soundboardVolume: 0.8,
   autoMiniPlayer: true,
   shareCaptions: true,

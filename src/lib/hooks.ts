@@ -6,17 +6,6 @@ export function useEmitter(em: { subscribe: (fn: () => void) => () => void } | n
   useEffect(() => (em ? em.subscribe(force) : undefined), [em]);
 }
 
-export function useMediaQuery(q: string): boolean {
-  const [m, setM] = useState(() => window.matchMedia(q).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(q);
-    const on = () => setM(mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  }, [q]);
-  return m;
-}
-
 export function useNow(intervalMs = 1000) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {

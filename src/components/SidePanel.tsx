@@ -1,48 +1,42 @@
 import type { ReactNode } from 'react';
-import { LayoutGrid, MessageSquare, Users, X } from 'lucide-react';
+import { ArrowLeft, X } from 'lucide-react';
 
 export type SideTab = 'people' | 'chat' | 'activities';
 
-/** One side panel, three tabs: everything social lives in the same place. */
+/** The one side panel. What it shows is picked with the buttons in the call bar. */
 export function SidePanel({
   tab,
-  onTab,
+  title,
+  count,
+  onBack,
   onClose,
-  counts,
   children,
 }: {
   tab: SideTab;
-  onTab: (t: SideTab) => void;
+  title: string;
+  /** Small number next to the title (people in the call). */
+  count?: number;
+  /** Shown as a back arrow, e.g. from a game back to the list of activities. */
+  onBack?: () => void;
   onClose: () => void;
-  counts: { people: number; unread: number };
   children: ReactNode;
 }) {
-  const tabs: { id: SideTab; label: string; icon: ReactNode; badge?: number }[] = [
-    { id: 'people', label: 'People', icon: <Users size={16} />, badge: counts.people },
-    { id: 'chat', label: 'Chat', icon: <MessageSquare size={16} />, badge: tab === 'chat' ? 0 : counts.unread },
-    { id: 'activities', label: 'Activities', icon: <LayoutGrid size={16} /> },
-  ];
   return (
-    <aside className="side-panel" aria-label="Side panel" data-testid="side-panel" data-tab={tab}>
-      <div className="side-tabs" role="tablist">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            className={tab === t.id ? 'active' : ''}
-            onClick={() => onTab(t.id)}
-            data-testid={`side-tab-${t.id}`}
-          >
-            {t.icon}
-            <span>{t.label}</span>
-            {t.badge ? <span className="side-tab-badge">{t.id === 'people' ? t.badge : t.badge > 9 ? '9+' : t.badge}</span> : null}
+    <aside className="side-panel" aria-label={title} data-testid="side-panel" data-tab={tab}>
+      <header className="side-head">
+        {onBack && (
+          <button className="icon-btn ghost" onClick={onBack} aria-label="Back to activities" data-testid="act-back">
+            <ArrowLeft size={18} />
           </button>
-        ))}
-        <button className="icon-btn ghost side-close" onClick={onClose} aria-label="Close side panel" data-testid="side-close">
+        )}
+        <h2>
+          {title}
+          {count !== undefined && <span className="side-count">{count}</span>}
+        </h2>
+        <button className="icon-btn ghost side-close" onClick={onClose} aria-label="Close panel" data-testid="side-close">
           <X size={18} />
         </button>
-      </div>
+      </header>
       {children}
     </aside>
   );

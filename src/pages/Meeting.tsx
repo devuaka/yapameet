@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Home, RotateCcw } from 'lucide-react';
-import { BrandLink } from '../components/Brand';
+import { SiteHeader } from '../components/Brand';
 import { PreJoin } from '../components/PreJoin';
 import { CallView } from '../components/CallView';
 import { LocalMedia } from '../rtc/LocalMedia';
@@ -9,7 +9,7 @@ import { MeetingSession } from '../rtc/MeetingSession';
 import { parseMeetingInput } from '../lib/meetingCode';
 import { cryptoAvailable } from '../lib/crypto';
 import { addRecentMeeting, formatDuration } from '../lib/hooks';
-import { getSettings, updateSettings } from '../lib/settings';
+import { updateSettings } from '../lib/settings';
 import { getAudioContext, preloadSounds, sounds } from '../lib/sounds';
 
 type Phase = 'lobby' | 'call' | 'left';
@@ -83,23 +83,23 @@ export function MeetingPage() {
 
   if (!code) {
     return (
-      <Shell>
-        <h1>Invalid meeting link</h1>
+      <Shell emoji="🤔" title="That link doesn't look right">
         <p className="muted">Meeting codes are 3 to 40 letters, numbers or dashes, like abc-defg-hij.</p>
-        <Link className="btn btn-primary" to="/join">
-          Enter a code
-        </Link>
+        <div className="btn-row">
+          <Link className="btn btn-primary" to="/">
+            <Home size={18} /> Go home
+          </Link>
+        </div>
       </Shell>
     );
   }
 
   if (!cryptoAvailable()) {
     return (
-      <Shell>
-        <h1>Secure connection required</h1>
+      <Shell emoji="🔒" title="Secure connection required">
         <p className="muted">
-          Browsers only allow camera, microphone and encryption on secure pages. Open Yapameet over <b>https://</b> (or
-          on localhost when developing).
+          Browsers only allow camera, microphone and encryption on secure pages. Open Yapameet over <b>https://</b> (or on localhost when
+          developing).
         </p>
       </Shell>
     );
@@ -107,15 +107,14 @@ export function MeetingPage() {
 
   if (phase === 'left') {
     return (
-      <Shell>
-        <h1>You left the meeting</h1>
-        {callDuration > 0 && <p className="muted">Call time {formatDuration(callDuration)}</p>}
-        <div className="create-actions">
+      <Shell emoji="👋" title="You left the call">
+        <p className="muted">{callDuration > 0 ? `You were in there for ${formatDuration(callDuration)}.` : 'See you next time.'}</p>
+        <div className="btn-row">
           <button className="btn btn-primary" onClick={rejoin} data-testid="rejoin">
             <RotateCcw size={18} /> Rejoin
           </button>
           <Link className="btn btn-ghost" to="/">
-            <Home size={18} /> Return home
+            <Home size={18} /> Home
           </Link>
         </div>
       </Shell>
@@ -126,18 +125,22 @@ export function MeetingPage() {
     return <CallView session={session} local={local} onLeave={() => void leave()} />;
   }
 
-  return <PreJoin code={code} local={local} defaultName={getSettings().displayName} onJoin={(n) => void join(n)} />;
+  return <PreJoin code={code} local={local} onJoin={(n) => void join(n)} />;
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ emoji, title, children }: { emoji: string; title: string; children: React.ReactNode }) {
   return (
     <div className="page">
       <div className="bg-glow" aria-hidden="true" />
-      <header className="site-header">
-        <BrandLink />
-      </header>
+      <SiteHeader bare />
       <main className="center-page">
-        <div className="card center-card">{children}</div>
+        <div className="card center-card">
+          <span className="center-emoji" aria-hidden="true">
+            {emoji}
+          </span>
+          <h1>{title}</h1>
+          {children}
+        </div>
       </main>
     </div>
   );

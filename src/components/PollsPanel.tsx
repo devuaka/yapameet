@@ -62,7 +62,7 @@ export function PollsView({
               </button>
             )}
             <Toggle label="Anonymous votes" checked={anon} onChange={setAnon} />
-            <div className="create-actions">
+            <div className="btn-row">
               <button className="btn btn-primary" disabled={!valid} onClick={submit} data-testid="poll-launch">
                 <BarChart3 size={16} /> Launch poll
               </button>

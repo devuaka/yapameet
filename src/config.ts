@@ -80,5 +80,3 @@ export async function getIceServers(): Promise<RTCIceServer[]> {
   cachedIce = { servers, at: Date.now() };
   return servers;
 }
-
-export const hasTurn = () => config.turnUrls.length > 0 || !!config.turnCredentialsUrl;

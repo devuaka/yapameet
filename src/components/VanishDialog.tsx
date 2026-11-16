@@ -72,7 +72,7 @@ export function VanishDialog({ local, session, onClose }: { local: LocalMedia; s
   }, [hasCam]);
 
   return (
-    <Modal title="⚡ Lightning Vanish" onClose={onClose} wide>
+    <Modal title="⚡ Lightning Vanish" onClose={onClose} size="wide">
       <div className="ghost-dialog vanish-dialog" data-testid="vanish-dialog">
         {!hasCam ? (
           <p className="error-text">Turn your camera on first. The toy needs a photo of your room.</p>

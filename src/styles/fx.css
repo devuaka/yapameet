@@ -1,0 +1,729 @@
+/* Screen effects, game overlays and the easter eggs. */
+
+/* ---------------------------------------------------------------- full-screen effects */
+.fx-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+}
+html.fx-barrelroll #root {
+  animation: barrelroll 1.6s cubic-bezier(0.45, 0, 0.2, 1);
+}
+@keyframes barrelroll {
+  0% {
+    transform: rotate(0) scale(1);
+  }
+  40% {
+    transform: rotate(200deg) scale(0.82);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+html.fx-party .tile video,
+html.fx-party .tile .tile-avatar {
+  animation: party-hue 1.2s linear infinite;
+}
+html.fx-party .call::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(255, 0, 128, 0.25), transparent 30%),
+    radial-gradient(circle at 80% 40%, rgba(0, 200, 255, 0.25), transparent 30%),
+    radial-gradient(circle at 50% 80%, rgba(255, 220, 0, 0.22), transparent 30%);
+  mix-blend-mode: screen;
+  animation: disco 0.9s steps(4) infinite;
+}
+@keyframes party-hue {
+  to {
+    filter: hue-rotate(360deg) saturate(1.6);
+  }
+}
+@keyframes disco {
+  25% {
+    transform: rotate(90deg) scale(1.2);
+  }
+  50% {
+    transform: rotate(180deg);
+  }
+  75% {
+    transform: rotate(270deg) scale(1.2);
+  }
+}
+html.fx-flash body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: #fff;
+  pointer-events: none;
+  animation: flash 0.45s ease-out forwards;
+}
+@keyframes flash {
+  from {
+    opacity: 0.85;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- ghost protocol */
+.ghost-room,
+.ghost-freeze {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ghost-freeze.fading {
+  animation: ghost-fade 3.2s ease-in 0.3s forwards;
+}
+@keyframes ghost-fade {
+  0% {
+    opacity: 1;
+    filter: none;
+  }
+  35% {
+    opacity: 0.85;
+    filter: brightness(1.15) saturate(0.7);
+  }
+  70% {
+    opacity: 0.35;
+    filter: brightness(1.4) blur(1px) saturate(0.3);
+  }
+  100% {
+    opacity: 0;
+    filter: brightness(1.6) blur(3px) saturate(0);
+  }
+}
+.tile.ghosting {
+  animation: ghost-out 5.2s ease forwards;
+}
+@keyframes ghost-out {
+  0%,
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+.tile.ghosting .tile-label {
+  animation: fade 0.6s ease;
+}
+.ghost-dialog p {
+  color: var(--text-2);
+}
+.ghost-steps {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  color: var(--text-2);
+}
+.ghost-countdown {
+  position: relative;
+  aspect-ratio: 16/9;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: #000;
+}
+.ghost-count {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-family: var(--font-brand);
+  font-size: 120px;
+  font-weight: 800;
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.6);
+  animation: count-pop 1s ease infinite;
+}
+.vanish-in .ghost-count {
+  color: #facc15;
+}
+@keyframes count-pop {
+  0% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+  20% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+.ghost-go {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  margin: 0;
+  color: #fff !important;
+  font-weight: 700;
+  text-align: center;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+}
+.vanish-dialog > p {
+  margin: 12px 0 0;
+}
+.ghost-photo {
+  position: relative;
+  margin-bottom: 12px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.ghost-photo img {
+  display: block;
+  width: 100%;
+}
+.ghost-armed {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  background: var(--overlay);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- lightning vanish */
+.tile.zap-strike {
+  animation: hit-shake 0.4s ease 0.3s;
+}
+.zap-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.zap-bolt {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  filter: drop-shadow(0 0 4px #4f8dff) drop-shadow(0 0 16px #2f5bff);
+  animation: zap-bolt 0.45s steps(1, end) 0.25s;
+}
+.zap-bolt polyline {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.zap-bolt .glow {
+  stroke: #7fb6ff;
+  stroke-width: 10;
+  opacity: 0.85;
+}
+.zap-bolt .core {
+  stroke: #fff;
+  stroke-width: 3.5;
+}
+@keyframes zap-bolt {
+  0% {
+    opacity: 1;
+  }
+  18% {
+    opacity: 0.5;
+  }
+  30% {
+    opacity: 1;
+  }
+  52% {
+    opacity: 0.6;
+  }
+  62% {
+    opacity: 1;
+  }
+}
+.zap-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  animation: zap-flash 0.45s ease-out 0.3s;
+}
+@keyframes zap-flash {
+  0% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.smite-room {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: zap-appear 0.12s ease-out;
+}
+.smite-room.mirror {
+  transform: scaleX(-1);
+}
+.smite-room.leaving {
+  animation: zap-return 0.8s ease-in forwards;
+}
+@keyframes zap-appear {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes zap-return {
+  to {
+    opacity: 0;
+  }
+}
+.zap-smoke {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.zap-smoke i {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  width: 34%;
+  aspect-ratio: 1;
+  margin: -17% 0 0 -17%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(52, 52, 58, 0.8) 0, rgba(52, 52, 58, 0) 70%);
+  opacity: 0;
+  animation: zap-smoke 1.8s ease-out forwards;
+}
+.zap-smoke i:nth-child(2) {
+  --dx: -55%;
+  animation-delay: 0.08s;
+}
+.zap-smoke i:nth-child(3) {
+  --dx: 55%;
+  animation-delay: 0.14s;
+}
+.zap-smoke i:nth-child(4) {
+  --dx: -25%;
+  --dy: -120%;
+  animation-delay: 0.22s;
+}
+.zap-smoke i:nth-child(5) {
+  --dx: 30%;
+  --dy: -110%;
+  animation-delay: 0.3s;
+}
+@keyframes zap-smoke {
+  0% {
+    transform: translate(0, 0) scale(0.4);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(var(--dx, 0), var(--dy, -80%)) scale(2.4);
+    opacity: 0;
+  }
+}
+.zap-mark {
+  color: #facc15;
+}
+
+/* ---------------------------------------------------------------- throwables */
+.throw-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 24;
+  pointer-events: none;
+  overflow: hidden;
+}
+.throw-proj {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin: -21px 0 0 -21px;
+  font-size: 42px;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.4));
+}
+.throw-splat {
+  position: absolute;
+  width: 150px;
+  height: 120px;
+  margin: -60px 0 0 -75px;
+  display: grid;
+  place-items: center;
+  border-radius: 46% 54% 40% 60% / 55% 45% 55% 45%;
+  background:
+    radial-gradient(circle at 20% 15%, var(--splat) 0 12px, transparent 13px),
+    radial-gradient(circle at 85% 25%, var(--splat) 0 9px, transparent 10px),
+    radial-gradient(circle at 75% 90%, var(--splat) 0 11px, transparent 12px),
+    radial-gradient(circle at 10% 80%, var(--splat) 0 8px, transparent 9px),
+    radial-gradient(ellipse at center, var(--splat) 0 45%, transparent 47%);
+  opacity: 0.92;
+  animation: splat 3.2s ease forwards;
+}
+.throw-splat span {
+  font-size: 26px;
+  opacity: 0.7;
+}
+@keyframes splat {
+  0% {
+    transform: scale(0.2);
+  }
+  8% {
+    transform: scale(1.15);
+  }
+  14% {
+    transform: scale(1);
+  }
+  70% {
+    opacity: 0.92;
+    transform: translateY(10px) scaleY(1.06);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(40px) scaleY(1.2);
+  }
+}
+.throw-hearts {
+  position: absolute;
+  margin: -20px 0 0 -45px;
+  font-size: 30px;
+  animation: hearts-up 2.6s ease-out forwards;
+}
+@keyframes hearts-up {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-90px) scale(1);
+    opacity: 0;
+  }
+}
+.tile.hit-shake {
+  animation: hit-shake 0.4s ease;
+}
+@keyframes hit-shake {
+  20% {
+    transform: translate(-6px, 3px) rotate(-1deg);
+  }
+  40% {
+    transform: translate(5px, -3px) rotate(1deg);
+  }
+  60% {
+    transform: translate(-3px, 2px);
+  }
+  80% {
+    transform: translate(2px, -1px);
+  }
+}
+.throw-picker {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--overlay);
+  backdrop-filter: blur(8px);
+}
+.throw-picker button {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 20px;
+  transition: transform 0.12s var(--ease), background 0.12s;
+}
+.throw-picker button:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: scale(1.14);
+}
+
+/* ---------------------------------------------------------------- spin the wheel */
+.spin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  place-items: center;
+  background: rgba(4, 5, 10, 0.6);
+  backdrop-filter: blur(4px);
+  animation: fade 0.2s ease;
+}
+.spin-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 26px;
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+  animation: pop 0.25s var(--ease);
+}
+.spin-by {
+  font-weight: 700;
+  color: var(--text-2);
+}
+.spin-wheel-wrap {
+  position: relative;
+  width: min(300px, 70vw);
+  aspect-ratio: 1;
+}
+.spin-wheel {
+  width: 100%;
+  height: 100%;
+  animation: spin-to 4.2s cubic-bezier(0.12, 0.6, 0.15, 1) forwards;
+}
+@keyframes spin-to {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(var(--final));
+  }
+}
+.spin-label {
+  fill: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.spin-hub {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 3;
+}
+.spin-pointer {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  z-index: 2;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 14px solid transparent;
+  border-right: 14px solid transparent;
+  border-top: 26px solid var(--text);
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
+}
+.spin-result {
+  min-height: 36px;
+  color: var(--muted);
+  font-family: var(--font-brand);
+  font-size: 26px;
+  font-weight: 800;
+}
+.spin-result.show {
+  color: var(--text);
+  animation: count-pop 0.6s ease;
+}
+
+/* ---------------------------------------------------------------- rock paper scissors challenge */
+.rps-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  z-index: 140;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow);
+  animation: rise 0.2s var(--ease);
+}
+
+/* ---------------------------------------------------------------- draw & guess */
+.dg-banner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 14px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: var(--blur);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: var(--shadow);
+}
+.dg-float {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 22;
+  transform: translateX(-50%);
+  width: min(760px, 94%);
+}
+.dg-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.dg-round {
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+.dg-word {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 18px;
+}
+.dg-word b {
+  color: var(--accent-text);
+  font-family: var(--font-brand);
+  font-size: 22px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.dg-hint {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.dg-hint i {
+  min-width: 0.7em;
+  border-bottom: 2px solid var(--border-strong);
+  font-style: normal;
+  text-align: center;
+}
+.dg-hint small {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.dg-timer {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.dg-timer.low {
+  background: var(--danger);
+  color: #fff;
+  animation: rec-pulse 0.8s ease-in-out infinite;
+}
+.dg-guess {
+  grid-column: 1;
+  display: flex;
+  gap: 6px;
+}
+.dg-guess input {
+  min-height: 36px;
+  padding: 6px 12px;
+}
+.dg-got {
+  grid-column: 1;
+  font-weight: 700;
+  color: var(--ok);
+}
+.dg-side {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  gap: 12px;
+  font-size: 12.5px;
+}
+.dg-scores,
+.dg-feed {
+  max-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dg-scores li {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+.dg-scores li span {
+  margin-left: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.dg-scores li.me {
+  color: var(--accent-text);
+}
+.dg-feed li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.dg-feed li.ok {
+  color: var(--ok);
+}
+.dg-over {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 18px;
+  animation: rise 0.3s var(--ease);
+}
+.dg-over svg {
+  color: #facc15;
+}
+.dg-podium {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+}
+.dg-podium li.me {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+.dg-podium span {
+  margin-left: 4px;
+  font-weight: 800;
+}
+
+@media (max-width: 760px) {
+  .dg-banner {
+    grid-template-columns: 1fr;
+  }
+  .dg-side {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .dg-feed {
+    display: none;
+  }
+}

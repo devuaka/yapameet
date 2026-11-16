@@ -14,7 +14,7 @@ function drawStage(stage: HTMLElement, g: CanvasRenderingContext2D, W: number, H
   const sr = stage.getBoundingClientRect();
   const sx = W / Math.max(1, sr.width);
   const sy = H / Math.max(1, sr.height);
-  g.fillStyle = '#0b0c15';
+  g.fillStyle = '#090a11';
   g.fillRect(0, 0, W, H);
   const tiles = stage.querySelectorAll<HTMLElement>('.tile');
   tiles.forEach((tile) => {
@@ -26,9 +26,17 @@ function drawStage(stage: HTMLElement, g: CanvasRenderingContext2D, W: number, H
     if (w < 4 || h < 4) return;
     g.save();
     g.beginPath();
-    g.roundRect(x, y, w, h, 12 * sx);
+    g.roundRect(x, y, w, h, 20 * sx);
     g.clip();
-    g.fillStyle = '#161829';
+    // Camera-off tiles get the same per-person colour as on screen.
+    const hueRaw = tile.querySelector<HTMLElement>('.tile-avatar')?.style.getPropertyValue('--hue');
+    const hue = hueRaw ? Number(hueRaw) : null;
+    if (hue !== null) {
+      const bg = g.createRadialGradient(x + w / 2, y + h * 0.42, 0, x + w / 2, y + h * 0.42, Math.max(w, h) * 0.6);
+      bg.addColorStop(0, `hsl(${hue} 46% 25%)`);
+      bg.addColorStop(1, `hsl(${hue} 38% 10%)`);
+      g.fillStyle = bg;
+    } else g.fillStyle = '#12141e';
     g.fillRect(x, y, w, h);
     const v = tile.querySelector('video');
     const img = tile.querySelector<HTMLImageElement>('img.ghost-room, img.bot-img');
@@ -62,7 +70,12 @@ function drawStage(stage: HTMLElement, g: CanvasRenderingContext2D, W: number, H
     } else if (!img) {
       const avatar = tile.querySelector<HTMLElement>('.avatar');
       const rad = Math.min(w, h) * 0.18;
-      g.fillStyle = '#7c5cf6';
+      if (hue !== null) {
+        const av = g.createLinearGradient(x + w / 2 - rad, y + h / 2 - rad, x + w / 2 + rad, y + h / 2 + rad);
+        av.addColorStop(0, `hsl(${hue} 72% 60%)`);
+        av.addColorStop(1, `hsl(${(hue + 50) % 360} 70% 46%)`);
+        g.fillStyle = av;
+      } else g.fillStyle = '#7c5cf6';
       g.beginPath();
       g.arc(x + w / 2, y + h / 2, rad, 0, Math.PI * 2);
       g.fill();
@@ -87,9 +100,11 @@ function drawStage(stage: HTMLElement, g: CanvasRenderingContext2D, W: number, H
       g.restore();
     }
     if (tile.classList.contains('speaking')) {
-      g.strokeStyle = '#a78bfa';
-      g.lineWidth = 4 * sx;
-      g.strokeRect(x + 2, y + 2, w - 4, h - 4);
+      g.strokeStyle = '#4ade80';
+      g.lineWidth = 6 * sx;
+      g.beginPath();
+      g.roundRect(x, y, w, h, 20 * sx);
+      g.stroke();
     }
     const label = tile.querySelector<HTMLElement>('.tile-label span')?.textContent;
     if (label) {

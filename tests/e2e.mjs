@@ -290,18 +290,18 @@ async function main() {
   let code = '';
 
   try {
-    await step('Landing page loads, New meeting creates a code + link', async () => {
+    await step('Home page loads, New meeting opens the lobby with a fresh code + invite link', async () => {
       await A.page.goto(BASE);
       await A.page.locator('[data-testid="new-meeting"]').click();
-      code = (await A.page.locator('[data-testid="new-code"]').innerText()).trim();
-      const link = (await A.page.locator('[data-testid="new-link"]').innerText()).trim();
+      await A.page.waitForURL('**/meeting/*');
+      code = new URL(A.page.url()).pathname.split('/').pop();
+      const link = (await A.page.locator('[data-testid="invite-link"]').innerText()).trim();
       if (!/^[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(code)) throw new Error(`bad code ${code}`);
       if (!link.endsWith(`/meeting/${code}`)) throw new Error(`bad link ${link}`);
       return code;
     });
 
-    await step('A starts the meeting (pre-join screen, name, join)', async () => {
-      await A.page.locator('[data-testid="start-meeting"]').click();
+    await step('A joins from the lobby (camera preview, name, join)', async () => {
       await A.page.locator('[data-testid="name-input"]').fill('Alice');
       await until(() => A.page.locator('[data-testid="prejoin-video"]').count(), { what: 'camera preview' });
       await A.page.locator('[data-testid="join-button"]').click();
@@ -310,10 +310,10 @@ async function main() {
       });
     });
 
-    await step('B joins through the Join page using the pasted link', async () => {
-      await B.page.goto(`${BASE}/join`);
-      await B.page.locator('[data-testid="join-code"]').fill(`${BASE}/meeting/${code.toUpperCase()}`);
-      await B.page.locator('[data-testid="join-submit"]').click();
+    await step('B joins from the home page by pasting the link', async () => {
+      await B.page.goto(BASE);
+      await B.page.locator('[data-testid="landing-code"]').fill(`${BASE}/meeting/${code.toUpperCase()}`);
+      await B.page.locator('[data-testid="landing-join"]').click();
       await B.page.waitForURL(`**/meeting/${code}`);
       await B.page.locator('[data-testid="name-input"]').fill('Bob');
       await until(() => B.page.locator('[data-testid="prejoin-video"]').count(), { what: 'camera preview' });
@@ -808,27 +808,31 @@ async function main() {
     });
 
     await step('Live captions: B turns on captions, A is asked to transcribe, captions show on B', async () => {
-      const supported = await B.page.locator('[data-testid="ctrl-cc"]').count();
-      if (!supported) return 'SKIPPED: speech recognition API not present in this browser';
-      await B.page.locator('[data-testid="ctrl-cc"]').click();
+      await B.page.locator('[data-testid="ctrl-more"]').click();
+      const supported = await B.page.locator('[data-testid="more-captions"]').count();
+      if (!supported) {
+        await B.page.keyboard.press('Escape');
+        return 'SKIPPED: speech recognition API not present in this browser';
+      }
+      await B.page.locator('[data-testid="more-captions"]').click();
       await until(() => A.page.evaluate(() => window.__yapameet.anyoneWantsCaptions()), { what: 'A knows captions are wanted' });
       // Headless browsers can't reach the speech service, so inject a caption as A's recognizer would.
       await A.page.evaluate(() => window.__yapameet.sendApp('cc', { id: 't1', text: 'hello from the captions test', final: true }));
       await until(async () => (await B.page.locator('[data-testid="captions-overlay"]').innerText().catch(() => '')).includes('Alice: hello from the captions test'), {
         what: 'caption on B',
       });
-      await B.page.locator('[data-testid="ctrl-cc"]').click();
+      await menuItem(B.page, 'ctrl-more', 'more-captions');
       await until(() => A.page.evaluate(() => !window.__yapameet.anyoneWantsCaptions()), { what: 'captions off everywhere' });
       return 'caption delivered and shown with speaker name';
     });
 
     await step('Recording: B sees REC while A records; stopping saves a video file', async () => {
-      await openTools(A.page, 'capture');
-      await A.page.locator('[data-testid="tool-record"]').click();
+      await closeSide(A.page);
+      await menuItem(A.page, 'ctrl-more', 'more-record');
       await B.page.locator('[data-testid="rec-chip"]').waitFor({ timeout: 10000 });
       await until(() => B.page.locator('[data-testid="tile-remote-cam"] .tile-rec').count(), { what: 'REC badge on tile' });
       await sleep(3000);
-      const [dl] = await Promise.all([A.page.waitForEvent('download', { timeout: 15000 }), A.page.locator('[data-testid="tool-record"]').click()]);
+      const [dl] = await Promise.all([A.page.waitForEvent('download', { timeout: 15000 }), menuItem(A.page, 'ctrl-more', 'more-record')]);
       const size = await downloadSize(dl);
       if (size < 20_000) throw new Error(`recording only ${size} bytes`);
       await until(async () => (await B.page.locator('[data-testid="rec-chip"]').count()) === 0, { what: 'REC cleared on B' });
@@ -836,7 +840,7 @@ async function main() {
     });
 
     await step('Group photo downloads a PNG of the call', async () => {
-      const [dl] = await Promise.all([A.page.waitForEvent('download', { timeout: 10000 }), A.page.locator('[data-testid="tool-photo"]').click()]);
+      const [dl] = await Promise.all([A.page.waitForEvent('download', { timeout: 10000 }), menuItem(A.page, 'ctrl-more', 'more-photo')]);
       const size = await downloadSize(dl);
       if (!dl.suggestedFilename().endsWith('.png') || size < 20_000) throw new Error(`${dl.suggestedFilename()} ${size}`);
       return `${Math.round(size / 1024)} KB`;
@@ -887,7 +891,7 @@ async function main() {
       await A.page.keyboard.press('Escape');
     });
 
-    await step('Organised controls: More menu, camera menu quick blur, tabbed side panel', async () => {
+    await step('Organised controls: More menu, camera menu quick blur, one side panel switched from the bar', async () => {
       await A.page.locator('[data-testid="ctrl-more"]').click();
       const items = await A.page.locator('[data-testid="more-menu"] .menu-item').count();
       await A.page.keyboard.press('Escape');
@@ -896,13 +900,14 @@ async function main() {
       await menuItem(A.page, 'ctrl-cam-menu', 'menu-blur');
       await until(() => A.page.evaluate(() => window.__yapameetSettings.get().bgEffect === 'none'), { what: 'blur off' });
       await A.page.locator('[data-testid="ctrl-people"]').click();
-      await A.page.locator('[data-testid="side-tab-chat"]').click();
+      await A.page.locator('[data-testid="side-panel"][data-tab="people"]').waitFor();
+      await A.page.locator('[data-testid="ctrl-chat"]').click();
       await A.page.locator('[data-testid="chat-input"]').waitFor();
-      await A.page.locator('[data-testid="side-tab-activities"]').click();
-      await A.page.locator('[data-testid="side-tab-activities"]').click();
+      await openTools(A.page);
       await A.page.locator('[data-testid="act-watch"]').waitFor();
+      if ((await A.page.locator('[data-testid="side-panel"]').count()) !== 1) throw new Error('expected exactly one side panel');
       await closeSide(A.page);
-      return `${items} items in More, tabs People/Chat/Activities switch in one panel`;
+      return `${items} items in More, People/Chat/Activities share one panel`;
     });
 
     await step('Watch together: A plays a video link, B gets the synced player', async () => {
@@ -980,8 +985,8 @@ async function main() {
       }, { what: 'message on B' });
       if (/shit|f\*ck/.test(shown) || !shown.includes('s***')) throw new Error(`not censored: ${shown}`);
       await B.page.evaluate(() => window.__yapameetSettings.update({ censorSwears: false }));
-      await B.page.locator('[data-testid="side-tab-people"]').click();
-      await B.page.locator('[data-testid="side-tab-chat"]').click();
+      await B.page.locator('[data-testid="ctrl-people"]').click();
+      await B.page.locator('[data-testid="ctrl-chat"]').click();
       const raw = await B.page.locator('[data-testid="chat-msg"]').last().innerText();
       await B.page.evaluate(() => window.__yapameetSettings.update({ censorSwears: true }));
       await closeSide(A.page);
@@ -1007,7 +1012,7 @@ async function main() {
       if (!(await A.page.locator('[data-testid="chat-input"]').count())) await A.page.locator('[data-testid="ctrl-chat"]').click();
       await A.page.locator('[data-testid="chat-input"]').fill('picture check');
       await A.page.locator('[data-testid="chat-input"]').press('Enter');
-      await B.page.locator('[data-testid="side-tab-chat"]').click();
+      await B.page.locator('[data-testid="ctrl-chat"]').click();
       // Messages are grouped per sender; the picture sits at the start of each group.
       await until(() => B.page.locator('[data-testid="chat-msg"] .chat-meta img.avatar-img').count(), { what: 'picture next to chat messages on B' });
       await closeSide(A.page);

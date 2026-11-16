@@ -1,8 +1,6 @@
 import { useCallback, useEffect } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom';
 import { Landing } from './pages/Landing';
-import { NewMeeting } from './pages/NewMeeting';
-import { JoinPage } from './pages/Join';
 import { MeetingPage } from './pages/Meeting';
 import { SettingsPage } from './pages/Settings';
 import { NotFound } from './pages/NotFound';
@@ -11,6 +9,17 @@ import { useToast } from './components/Toast';
 import { findEgg, updateSettings, useSettings } from './lib/settings';
 import { callState, fxBus, useKonami } from './lib/fx';
 import { sounds } from './lib/sounds';
+import { generateMeetingCode, parseMeetingInput } from './lib/meetingCode';
+
+/** Old links: /new starts a fresh meeting, /join?code=... goes to that meeting (or home). */
+function NewRedirect() {
+  return <Navigate to={`/meeting/${generateMeetingCode()}`} replace />;
+}
+function JoinRedirect() {
+  const [params] = useSearchParams();
+  const code = parseMeetingInput(params.get('code') ?? '');
+  return <Navigate to={code ? `/meeting/${code}` : '/'} replace />;
+}
 
 export function App() {
   const s = useSettings();
@@ -38,8 +47,8 @@ export function App() {
     <>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/new" element={<NewMeeting />} />
-        <Route path="/join" element={<JoinPage />} />
+        <Route path="/new" element={<NewRedirect />} />
+        <Route path="/join" element={<JoinRedirect />} />
         <Route path="/meeting/:code" element={<MeetingPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<NotFound />} />

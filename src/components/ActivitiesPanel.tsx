@@ -1,20 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  ArrowLeft,
   AudioLines,
   BarChart3,
-  Camera,
-  Captions,
-  Circle,
+  Clapperboard,
   Coins,
   Dices,
-  FileText,
-  Ghost,
-  Music4,
   Gamepad2,
+  Ghost,
   Headphones,
-  Clapperboard,
   Link2,
+  Music4,
   PartyPopper,
   Pencil,
   PenTool,
@@ -28,13 +23,10 @@ import {
 } from 'lucide-react';
 import type { PollStore, TimerStore } from '../rtc/collab';
 import { formatClock } from '../rtc/collab';
-import type { CaptionsStore } from '../rtc/captions';
-import { captionsSupported } from '../rtc/captions';
 import { VOICES } from '../rtc/voice';
-import { formatElapsed } from '../rtc/recorder';
 import type { LocalMedia } from '../rtc/LocalMedia';
 import type { MeetingSession, Participant } from '../rtc/MeetingSession';
-import { useEmitter, useNow } from '../lib/hooks';
+import { useEmitter } from '../lib/hooks';
 import { updateSettings, useSettings } from '../lib/settings';
 import { getAudioContext } from '../lib/sounds';
 import {
@@ -54,19 +46,13 @@ import { Toggle } from './controls';
 import { parseWatchUrl, type WatchStore } from '../rtc/watch';
 import { useToast } from './Toast';
 
-export type ActivityView = 'home' | 'games' | 'watch' | 'polls' | 'timer' | 'captions' | 'soundboard' | 'voice' | 'capture';
+export type ActivityView = 'home' | 'games' | 'watch' | 'polls' | 'timer' | 'soundboard' | 'voice';
 
 export interface ActivityFeatures {
   openWhiteboard: () => void;
+  openEffects: () => void;
   polls: PollStore;
   timer: TimerStore;
-  captions: CaptionsStore;
-  captionsOn: boolean;
-  toggleCaptions: () => void;
-  recording: boolean;
-  recordStart: number;
-  toggleRecording: () => void;
-  groupPhoto: () => void;
   openGhost: () => void;
   watch: WatchStore;
   openWatch: () => void;
@@ -74,18 +60,19 @@ export interface ActivityFeatures {
   fun: FunStore;
 }
 
-const TITLES: Record<Exclude<ActivityView, 'home'>, string> = {
+export const ACTIVITY_TITLES: Record<ActivityView, string> = {
+  home: 'Activities',
   games: 'Games',
   watch: 'Watch together',
   polls: 'Polls',
   timer: 'Timer',
-  captions: 'Captions & transcript',
   soundboard: 'Soundboard',
   voice: 'Voice changer',
-  capture: 'Record & photo',
 };
 
-/** Activities: a launcher grid; every tool gets its own page instead of one long list. */
+type TileId = Exclude<ActivityView, 'home'> | 'whiteboard' | 'effects';
+
+/** Activities: a launcher grid at home; every activity gets its own page. */
 export function ActivitiesPanel({
   session,
   local,
@@ -102,27 +89,18 @@ export function ActivitiesPanel({
   features: ActivityFeatures;
 }) {
   useEmitter(features.timer);
-  useEmitter(features.captions);
   useEmitter(features.polls);
   useEmitter(features.watch);
   useEmitter(features.dg);
   useEmitter(local);
   const s = useSettings();
-  const now = useNow(500);
 
   if (view !== 'home') {
     return (
       <div className="side-content" data-testid="activities-panel" data-view={view}>
-        <div className="act-head">
-          <button className="icon-btn ghost" onClick={() => onView('home')} aria-label="Back to activities" data-testid="act-back">
-            <ArrowLeft size={18} />
-          </button>
-          <h2>{TITLES[view]}</h2>
-        </div>
         <div className="tools-scroll">
           {view === 'polls' && <PollsView store={features.polls} participants={participants} selfId={session.selfId} />}
           {view === 'timer' && <TimerView timer={features.timer} />}
-          {view === 'captions' && <CaptionsView session={session} features={features} />}
           {view === 'soundboard' && <SoundboardView local={local} />}
           {view === 'voice' && <VoiceView local={local} />}
           {view === 'watch' && <WatchPage features={features} />}
@@ -132,7 +110,6 @@ export function ActivitiesPanel({
               <FunView session={session} features={features} />
             </>
           )}
-          {view === 'capture' && <CaptureView features={features} now={now} />}
         </div>
       </div>
     );
@@ -140,72 +117,68 @@ export function ActivitiesPanel({
 
   const openPolls = features.polls.polls.filter((p) => !p.ended).length;
   const voice = VOICES.find((v) => v.id === s.voiceFx);
-  const tiles: { id: ActivityView | 'whiteboard'; title: string; sub: string; icon: ReactNode; status?: string; tone?: string }[] = [
+  const fxOn = s.bgEffect !== 'none' || s.filter !== 'none' || s.sticker !== 'none' || s.autoFrame || s.lowLightBoost;
+  const tiles: { id: TileId; title: string; sub: string; icon: ReactNode; color: string; status?: string }[] = [
     {
       id: 'games',
       title: 'Games',
-      sub: 'Draw & Guess, wheel, RPS, fun',
+      sub: 'Draw & Guess and more',
       icon: <Gamepad2 size={22} />,
+      color: '#a78bfa',
       status: features.dg.active ? `Round ${features.dg.round}/${features.dg.total}` : undefined,
     },
     {
       id: 'watch',
       title: 'Watch together',
-      sub: 'YouTube & video links',
+      sub: 'YouTube and videos',
       icon: <Clapperboard size={22} />,
+      color: '#fb7185',
       status: features.watch.src ? (features.watch.playing ? 'Playing' : 'Paused') : undefined,
     },
-    { id: 'whiteboard', title: 'Whiteboard', sub: 'Draw together', icon: <PenTool size={22} /> },
-    { id: 'polls', title: 'Polls', sub: 'Ask the room', icon: <BarChart3 size={22} />, status: openPolls ? `${openPolls} open` : undefined },
-    {
-      id: 'timer',
-      title: 'Timer',
-      sub: 'Shared countdown',
-      icon: <Timer size={22} />,
-      status: features.timer.running ? formatClock(features.timer.remaining) : undefined,
-    },
-    { id: 'captions', title: 'Captions', sub: 'Subtitles & transcript', icon: <Captions size={22} />, status: features.captionsOn ? 'On' : undefined },
+    { id: 'whiteboard', title: 'Whiteboard', sub: 'Draw together', icon: <PenTool size={22} />, color: '#fbbf24' },
+    { id: 'polls', title: 'Polls', sub: 'Ask the room', icon: <BarChart3 size={22} />, color: '#38bdf8', status: openPolls ? `${openPolls} open` : undefined },
     {
       id: 'soundboard',
       title: 'Soundboard',
       sub: 'Sounds for everyone',
       icon: <Music4 size={22} />,
+      color: '#f472b6',
       status: local.playingSounds.size ? 'Playing' : undefined,
     },
     {
       id: 'voice',
       title: 'Voice changer',
-      sub: 'Robot, chipmunk, cave…',
+      sub: 'Sound like a robot',
       icon: <AudioLines size={22} />,
+      color: '#818cf8',
       status: voice && voice.id !== 'none' ? `${voice.emoji} ${voice.label}` : undefined,
     },
+    { id: 'effects', title: 'Effects', sub: 'Stickers, blur, filters', icon: <Sparkles size={22} />, color: '#fb923c', status: fxOn ? 'On' : undefined },
     {
-      id: 'capture',
-      title: 'Record & photo',
-      sub: 'Save the moment',
-      icon: <Camera size={22} />,
-      status: features.recording ? `REC ${formatElapsed(now - features.recordStart)}` : undefined,
-      tone: features.recording ? 'rec' : undefined,
+      id: 'timer',
+      title: 'Timer',
+      sub: 'Shared countdown',
+      icon: <Timer size={22} />,
+      color: '#34d399',
+      status: features.timer.running ? formatClock(features.timer.remaining) : undefined,
     },
   ];
 
   return (
     <div className="side-content" data-testid="activities-panel" data-view="home">
       <div className="tools-scroll">
-        <div className="act-grid act-grid-2">
+        <div className="act-grid">
           {tiles.map((t) => (
             <button
               key={t.id}
-              className={`act-tile ${t.status ? 'live' : ''} ${t.tone ?? ''}`}
-              onClick={() => (t.id === 'whiteboard' ? features.openWhiteboard() : onView(t.id))}
+              className={`act-tile ${t.status ? 'live' : ''}`}
+              style={{ ['--c' as string]: t.color }}
+              onClick={() => (t.id === 'whiteboard' ? features.openWhiteboard() : t.id === 'effects' ? features.openEffects() : onView(t.id))}
               data-testid={`act-${t.id}`}
-              title={t.sub}
             >
               <span className="act-icon">{t.icon}</span>
-              <span className="act-text">
-                <b>{t.title}</b>
-                <small>{t.sub}</small>
-              </span>
+              <b>{t.title}</b>
+              <small>{t.sub}</small>
               {t.status && <span className="act-status">{t.status}</span>}
             </button>
           ))}
@@ -223,20 +196,20 @@ function TimerView({ timer }: { timer: TimerStore }) {
   return (
     <section className="tools-section">
       {timer.running ? (
-        <>
+        <div className="timer-live">
           <div className="timer-big" data-testid="timer-big">
-            <Timer size={22} /> {formatClock(timer.remaining)}
+            {formatClock(timer.remaining)}
           </div>
           <p className="muted small">Started by {timer.startedBy}</p>
           <button className="btn btn-ghost" onClick={() => timer.stop()} data-testid="timer-stop">
             <Square size={14} /> Stop for everyone
           </button>
-        </>
+        </div>
       ) : (
         <>
           <div className="timer-presets">
             {[1, 3, 5, 10, 15, 30].map((m) => (
-              <button key={m} className="btn btn-small btn-ghost" onClick={() => timer.start(m * 60_000)} data-testid={`timer-${m}`}>
+              <button key={m} className="btn btn-ghost" onClick={() => timer.start(m * 60_000)} data-testid={`timer-${m}`}>
                 {m} min
               </button>
             ))}
@@ -250,14 +223,14 @@ function TimerView({ timer }: { timer: TimerStore }) {
               setCustomMin('');
             }}
           >
-            <input value={customMin} onChange={(e) => setCustomMin(e.target.value)} placeholder="Minutes" inputMode="decimal" aria-label="Custom minutes" />
-            <button className="btn btn-small" type="submit">
+            <input value={customMin} onChange={(e) => setCustomMin(e.target.value)} placeholder="Custom minutes" inputMode="decimal" aria-label="Custom minutes" />
+            <button className="btn" type="submit" disabled={!(parseFloat(customMin) > 0)}>
               Start
             </button>
           </form>
         </>
       )}
-      <p className="muted small">Everyone sees the countdown in the top bar and hears a chime at zero.</p>
+      <p className="muted small">Everyone sees the countdown at the top of the call and hears a chime at zero.</p>
     </section>
   );
 }
@@ -285,7 +258,7 @@ function WatchPage({ features }: { features: ActivityFeatures }) {
           <b>{w.playing ? 'Now playing' : 'Paused'}</b>
           <span>{w.src.title}</span>
           <small className="muted">Started by {w.startedBy}</small>
-          <div className="create-actions">
+          <div className="btn-row">
             <button className="btn btn-small" onClick={features.openWatch}>
               <Clapperboard size={14} /> Open player
             </button>
@@ -305,9 +278,9 @@ function WatchPage({ features }: { features: ActivityFeatures }) {
         <label className="field">
           <span>{w.src ? 'Play something else' : 'Video link'}</span>
           <div className="row-with-button">
-            <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://youtu.be/... or https://files.catbox.moe/abc.mp4" data-testid="watch-url" />
-            <button className="btn btn-primary btn-small" type="submit" disabled={!link.trim()} data-testid="watch-start">
-              <Link2 size={14} /> Watch
+            <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://youtu.be/…" data-testid="watch-url" />
+            <button className="btn btn-primary" type="submit" disabled={!link.trim()} data-testid="watch-start">
+              <Link2 size={15} /> Watch
             </button>
           </div>
         </label>
@@ -315,50 +288,8 @@ function WatchPage({ features }: { features: ActivityFeatures }) {
       {err && <p className="error-text">{err}</p>}
       <p className="muted small">
         Everyone gets the player. Play, pause and seeking are shared, and late joiners jump to the right spot. For your own movies, upload them to
-        catbox.moe (permanent) or litterbox (temporary) and paste the file link. Big files depend on that site's speed.
+        catbox.moe (permanent) or litterbox (temporary) and paste the file link.
       </p>
-    </section>
-  );
-}
-
-function CaptionsView({ session, features }: { session: MeetingSession; features: ActivityFeatures }) {
-  return (
-    <section className="tools-section">
-      <button
-        className={`fun-btn wide ${features.captionsOn ? 'on' : ''}`}
-        onClick={features.toggleCaptions}
-        disabled={!captionsSupported()}
-        data-testid="tool-captions"
-      >
-        <Captions size={20} />
-        <span>{features.captionsOn ? 'Turn captions off' : 'Turn on live captions'}</span>
-      </button>
-      <button className="fun-btn wide" onClick={() => features.captions.downloadTranscript(session.code)} data-testid="tool-transcript">
-        <FileText size={20} />
-        <span>Download transcript ({features.captions.transcript.length} lines)</span>
-      </button>
-      {features.captions.error && <p className="error-text">{features.captions.error}</p>}
-      <p className="muted small">
-        {captionsSupported()
-          ? 'Each person\'s browser transcribes their own voice and shares the text. Chrome and Edge use their speech service for this. Change your caption language in Settings > Meetings.'
-          : 'Live captions need Chrome or Edge.'}
-      </p>
-    </section>
-  );
-}
-
-function CaptureView({ features, now }: { features: ActivityFeatures; now: number }) {
-  return (
-    <section className="tools-section">
-      <button className={`fun-btn wide ${features.recording ? 'rec' : ''}`} onClick={features.toggleRecording} data-testid="tool-record">
-        {features.recording ? <Square size={20} /> : <Circle size={20} />}
-        <span>{features.recording ? `Stop recording (${formatElapsed(now - features.recordStart)})` : 'Record call'}</span>
-      </button>
-      <button className="fun-btn wide" onClick={features.groupPhoto} data-testid="tool-photo">
-        <Camera size={20} />
-        <span>Take a group photo</span>
-      </button>
-      <p className="muted small">Saved to your computer (video .webm, photo .png). Everyone sees a REC sign while you record.</p>
     </section>
   );
 }
@@ -393,12 +324,12 @@ function VoiceView({ local }: { local: LocalMedia }) {
 
 function FunView({ session, features }: { session: MeetingSession; features: ActivityFeatures }) {
   const items: { label: string; icon: ReactNode; on: () => void; id: string }[] = [
-    { label: 'Confetti', icon: <Sparkles size={20} />, on: () => session.sendFx('confetti'), id: 'tool-confetti' },
-    { label: 'Party mode', icon: <PartyPopper size={20} />, on: () => session.sendFx('party'), id: 'tool-party' },
-    { label: 'Barrel roll', icon: <Plane size={20} />, on: () => session.sendFx('barrelroll'), id: 'tool-barrelroll' },
-    { label: 'Ghost Protocol', icon: <Ghost size={20} />, on: features.openGhost, id: 'tool-ghost' },
-    { label: 'Roll a die', icon: <Dices size={20} />, on: () => session.sendChat(`🎲 rolled ${1 + Math.floor(Math.random() * 6)} (1-6)`), id: 'tool-dice' },
-    { label: 'Flip a coin', icon: <Coins size={20} />, on: () => session.sendChat(`🪙 ${Math.random() < 0.5 ? 'Heads' : 'Tails'}`), id: 'tool-coin' },
+    { label: 'Confetti', icon: <Sparkles size={18} />, on: () => session.sendFx('confetti'), id: 'tool-confetti' },
+    { label: 'Party mode', icon: <PartyPopper size={18} />, on: () => session.sendFx('party'), id: 'tool-party' },
+    { label: 'Barrel roll', icon: <Plane size={18} />, on: () => session.sendFx('barrelroll'), id: 'tool-barrelroll' },
+    { label: 'Ghost Protocol', icon: <Ghost size={18} />, on: features.openGhost, id: 'tool-ghost' },
+    { label: 'Roll a die', icon: <Dices size={18} />, on: () => session.sendChat(`🎲 rolled ${1 + Math.floor(Math.random() * 6)} (1-6)`), id: 'tool-dice' },
+    { label: 'Flip a coin', icon: <Coins size={18} />, on: () => session.sendChat(`🪙 ${Math.random() < 0.5 ? 'Heads' : 'Tails'}`), id: 'tool-coin' },
   ];
   return (
     <section className="tools-section">

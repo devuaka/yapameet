@@ -52,7 +52,7 @@ export function GhostDialog({ local, session, onClose }: { local: LocalMedia; se
   };
 
   return (
-    <Modal title="👻 Ghost Protocol" onClose={onClose} wide>
+    <Modal title="👻 Ghost Protocol" onClose={onClose} size="wide">
       <div className="ghost-dialog" data-testid="ghost-dialog">
         {phase === 'intro' && (
           <>
@@ -92,7 +92,7 @@ export function GhostDialog({ local, session, onClose }: { local: LocalMedia; se
               When you leave, you'll fade into this photo for everyone in the call. Move the camera and the illusion breaks,
               so keep it still.
             </p>
-            <div className="create-actions">
+            <div className="btn-row">
               <button className="btn btn-primary" onClick={onClose} data-testid="ghost-done">
                 Done
               </button>

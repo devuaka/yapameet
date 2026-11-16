@@ -1,9 +1,10 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Participant } from '../rtc/MeetingSession';
 import type { LayoutPref } from '../lib/settings';
 import { VideoTile, type Tile } from './VideoTile';
 
 const ASPECT = 16 / 9;
+const GAP = 10;
 
 /** Pick the column count that makes 16:9 tiles as large as possible in the box. */
 function bestGrid(n: number, w: number, h: number, gap: number) {
@@ -40,8 +41,8 @@ export function VideoGrid({
   layout,
   activeSpeaker,
   hideSelf,
-  compact,
   onThrow,
+  alone,
 }: {
   onThrow?: (target: string, item: import('../rtc/games').ThrowId) => void;
   participants: Participant[];
@@ -52,13 +53,14 @@ export function VideoGrid({
   layout: LayoutPref;
   activeSpeaker: string | null;
   hideSelf: boolean;
-  compact: boolean;
+  /** Shown over the stage while you are the only one in the call (the invite card). */
+  alone?: ReactNode;
 }) {
   const tiles = useMemo(() => {
     const list: Tile[] = [];
-    const alone = participants.length === 1;
+    const solo = participants.length === 1;
     for (const p of participants) {
-      if (!(p.isLocal && hideSelf && !alone)) list.push({ key: `${p.id}:cam`, kind: 'cam', p });
+      if (!(p.isLocal && hideSelf && !solo)) list.push({ key: `${p.id}:cam`, kind: 'cam', p });
       if (p.screen) list.push({ key: `${p.id}:screen`, kind: 'screen', p });
     }
     return list;
@@ -68,11 +70,8 @@ export function VideoGrid({
   const spotlight =
     tiles.find((t) => t.key === pinned) ??
     tiles.find((t) => t.kind === 'screen' && !t.p.isLocal) ??
-    (layout === 'speaker' && remoteCams.length > 0
-      ? (remoteCams.find((t) => t.p.id === activeSpeaker) ?? remoteCams[0])
-      : null);
+    (layout === 'speaker' && remoteCams.length > 0 ? (remoteCams.find((t) => t.p.id === activeSpeaker) ?? remoteCams[0]) : null);
 
-  const gap = compact ? 4 : 10;
   const [ref, size] = useSize<HTMLDivElement>();
   const common = { onPin, mirrorSelf, showDetails, onThrow };
 
@@ -80,12 +79,12 @@ export function VideoGrid({
     const rest = tiles.filter((t) => t !== spotlight);
     return (
       <div className="stage-wrap" ref={ref}>
-        <div className="stage stage-spotlight" style={{ gap }}>
+        <div className="stage stage-spotlight">
           <div className="spotlight-main">
             <VideoTile tile={spotlight} pinned={spotlight.key === pinned} {...common} />
           </div>
           {rest.length > 0 && (
-            <div className="spotlight-strip" style={{ gap }}>
+            <div className="spotlight-strip">
               {rest.map((t) => (
                 <VideoTile key={t.key} tile={t} pinned={t.key === pinned} compact {...common} />
               ))}
@@ -112,15 +111,13 @@ export function VideoGrid({
     );
   }
 
-  const { tw, th } = bestGrid(tiles.length, size.w, size.h, gap);
+  const { tw, th } = bestGrid(tiles.length, size.w, size.h, GAP);
   return (
     <div className="stage-wrap" ref={ref}>
-      <div className="stage stage-grid" style={{ gap }}>
+      <div className="stage stage-grid">
         {size.w > 0 &&
-          tiles.map((t) => (
-            <VideoTile key={t.key} tile={t} pinned={t.key === pinned} style={{ width: tw, height: th }} compact={tw < 260} {...common} />
-          ))}
-        {participants.length === 1 && <div className="alone-hint">You're the only one here. Share the link to invite people.</div>}
+          tiles.map((t) => <VideoTile key={t.key} tile={t} pinned={t.key === pinned} style={{ width: tw, height: th }} compact={tw < 260} {...common} />)}
+        {participants.length === 1 && alone}
       </div>
     </div>
   );

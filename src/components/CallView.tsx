@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
+  AudioLines,
+  Camera,
+  Captions,
+  ChevronUp,
+  Circle,
+  CircleDot,
+  Copy,
+  Droplets,
+  FileText,
   Hand,
   Maximize,
   MessageSquare,
@@ -8,29 +17,21 @@ import {
   Minimize,
   MonitorOff,
   MonitorUp,
+  MoreVertical,
   PhoneOff,
+  PictureInPicture2,
+  ScanFace,
   Settings as SettingsIcon,
+  Shapes,
   SmilePlus,
   Sparkles,
+  Speaker,
+  Square,
+  Timer as TimerIcon,
   Users,
   Video,
   VideoOff,
   WifiOff,
-  PictureInPicture2,
-  Captions,
-  CircleDot,
-  Timer as TimerIcon,
-  ChevronUp,
-  MoreVertical,
-  LayoutGrid,
-  Keyboard,
-  Camera,
-  Circle,
-  Square,
-  Speaker,
-  AudioLines,
-  ScanFace,
-  Droplets,
   Zap,
 } from 'lucide-react';
 import { WhiteboardStore } from '../rtc/whiteboard';
@@ -40,15 +41,15 @@ import { CallRecorder, snapshotStage } from '../rtc/recorder';
 import { WhiteboardView } from './WhiteboardView';
 import { WatchStore } from '../rtc/watch';
 import { WatchView } from './WatchView';
-import { ActivitiesPanel, type ActivityView } from './ActivitiesPanel';
+import { ACTIVITY_TITLES, ActivitiesPanel, type ActivityView } from './ActivitiesPanel';
 import { SidePanel, type SideTab } from './SidePanel';
 import { Menu, type MenuSection } from './Menu';
 import { VideoTile } from './VideoTile';
 import { censor } from '../lib/censor';
-import { supportsSinkSelection } from './media';
+import { supportsSinkSelection, useAudioLevel } from './media';
 import type { ChatMessage, MeetingSession, SessionEvent } from '../rtc/MeetingSession';
 import type { LocalMedia } from '../rtc/LocalMedia';
-import { useNow } from '../lib/hooks';
+import { formatDuration, useNow } from '../lib/hooks';
 import { meetingUrl } from '../lib/meetingCode';
 import { findEgg, updateSettings, useSettings } from '../lib/settings';
 import { isGabenCode } from '../lib/gaben';
@@ -56,12 +57,10 @@ import { setSoundsSink, sounds } from '../lib/sounds';
 import { audioLevels } from '../lib/audioLevel';
 import { callState, fxBus, useKonami } from '../lib/fx';
 import { Logo } from './Brand';
-import { MeetingInfo } from './MeetingInfo';
-import { formatDuration } from '../lib/hooks';
+import { MeetingInfo, QrCode } from './MeetingInfo';
 import { ChatPanel } from './ChatPanel';
-import { Modal, Toggle } from './controls';
-import { AppearancePanel, AudioPanel, EffectsPanel, MeetingPanel, VideoPanel } from './SettingsPanels';
-import { PfpEditor } from './PfpEditor';
+import { Modal } from './controls';
+import { SettingsView, ShortcutList, type SettingsSection } from './SettingsPanels';
 import { GhostDialog } from './GhostDialog';
 import { VanishDialog } from './VanishDialog';
 import { VANISH_CODE } from '../lib/vanish';
@@ -74,8 +73,6 @@ import { VideoGrid } from './VideoGrid';
 import { DrawGuessStore, FunStore, RPS_EMOJI, type RpsChoice } from '../rtc/games';
 import { DrawGuessBanner, RpsPrompt, SpinOverlay, ThrowLayer } from './GameUI';
 
-type SettingsTab = 'audio' | 'video' | 'effects' | 'appearance' | 'meeting' | 'general';
-
 function CtrlButton({
   icon,
   label,
@@ -87,10 +84,9 @@ function CtrlButton({
   testId,
   className,
   text,
-  badgeTestId,
+  textTestId,
+  extra,
 }: {
-  badgeTestId?: string;
-  text?: string;
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
@@ -100,38 +96,53 @@ function CtrlButton({
   badge?: number | string;
   testId?: string;
   className?: string;
+  /** Text next to the icon (turns the round button into a pill). */
+  text?: string;
+  textTestId?: string;
+  /** Decoration drawn inside the button, under the icon. */
+  extra?: React.ReactNode;
 }) {
   return (
     <button
       className={`ctrl ${text ? 'with-text' : ''} ${off ? 'off' : ''} ${active ? 'active' : ''} ${danger ? 'danger' : ''} ${className ?? ''}`}
       onClick={onClick}
       aria-label={label}
+      aria-pressed={active}
       title={label}
       data-testid={testId}
     >
+      {extra}
       {icon}
-      {text && <span className="ctrl-text">{text}</span>}
-      {badge ? (
-        <span className="badge" data-testid={badgeTestId}>
-          {badge}
+      {text && (
+        <span className="ctrl-text" data-testid={textTestId}>
+          {text}
         </span>
-      ) : null}
+      )}
+      {badge ? <span className="badge">{badge}</span> : null}
     </button>
   );
 }
 
-function CallClock({ start, showClock }: { start: number; showClock: boolean }) {
+/** A ring around the mic button that grows with your voice, so you can see you are being heard. */
+function MicPulse({ id }: { id: string }) {
+  const level = useAudioLevel(id);
+  return <span className="mic-pulse" style={{ transform: `scale(${1 + Math.min(1, level * 1.8) * 0.32})`, opacity: level > 0.04 ? 1 : 0 }} aria-hidden="true" />;
+}
+
+function Elapsed({ start }: { start: number }) {
   const now = useNow(1000);
+  if (!start) return null;
   return (
-    <>
-      {showClock && <span className="muted hide-md">{new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>}
-      {start > 0 && (
-        <span className="call-elapsed" title="Call length" data-testid="call-elapsed">
-          {formatDuration(now - start)}
-        </span>
-      )}
-    </>
+    <span className="call-elapsed" title="Call length" data-testid="call-elapsed">
+      {formatDuration(now - start)}
+    </span>
   );
+}
+
+/** How long your own recording has been running (ticks on its own, without re-rendering the call). */
+function RecTime({ start }: { start: number }) {
+  const now = useNow(1000);
+  return <>{formatDuration(now - start)}</>;
 }
 
 const isTyping = (el: Element | null) =>
@@ -146,12 +157,11 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   const [activityView, setActivityView] = useState<ActivityView>('home');
   const [menu, setMenu] = useState<'more' | 'mic' | 'cam' | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
+  const [settings, setSettings] = useState<SettingsSection | null>(null);
   const [pinned, setPinned] = useState<string | null>(null);
   const [seenOthers, setSeenOthers] = useState(0);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [nameDraft, setNameDraft] = useState(s.displayName);
   const [picker, setPicker] = useState(false);
   const [floating, setFloating] = useState<FloatingReaction[]>([]);
   const [ghostOpen, setGhostOpen] = useState(false);
@@ -372,6 +382,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   // Join/leave toasts.
   const prevIds = useRef<Map<string, string> | null>(null);
   useEffect(() => {
+    if (snap.left) return;
     const current = new Map(remotes.filter((p) => !p.leaving).map((p) => [p.id, p.name]));
     const prev = prevIds.current;
     if (prev) {
@@ -379,7 +390,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
       for (const [id, name] of prev) if (!current.has(id)) toast(`${name} left`);
     }
     prevIds.current = current;
-  }, [remotes, toast]);
+  }, [remotes, toast, snap.left]);
 
   useEffect(() => {
     if (!pinned) return;
@@ -420,7 +431,6 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
 
   // "You're muted" nudge: talking for a while with the mic off.
   useEffect(() => {
-    if (!s.mutedWarning) return;
     // Sliding 3 s window: speech has pauses, so count how much of the window had voice.
     const window3s: boolean[] = [];
     let lastWarn = 0;
@@ -439,7 +449,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
       }
     }, 250);
     return () => clearInterval(t);
-  }, [s.mutedWarning, s.pushToTalk, local, session.selfId, toast]);
+  }, [s.pushToTalk, local, session.selfId, toast]);
 
   // Session events: reactions, hands, effects.
   useEffect(
@@ -454,10 +464,6 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
           return;
         }
         if (e.type === 'react') {
-          if (!s.reactionsFloat) {
-            if (!e.isLocal) toast(`${e.name} reacted ${e.emoji}`);
-            return;
-          }
           const id = ++reactionId.current;
           setFloating((list) => [...list.slice(-30), { id, emoji: e.emoji, name: e.isLocal ? 'You' : e.name, x: 4 + Math.random() * 22 }]);
           window.setTimeout(() => setFloating((list) => list.filter((r) => r.id !== id)), 3800);
@@ -473,7 +479,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
           if (!e.isLocal && e.fx === 'party') toast(`🪩 ${e.name} started a party`);
         }
       }),
-    [session, toast, s.reactionsFloat],
+    [session, toast],
   );
 
   // Typing indicators expire on their own; a sent message clears its author.
@@ -716,6 +722,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   const speakers = local.devices.filter((d) => d.kind === 'audiooutput');
   const cams = local.devices.filter((d) => d.kind === 'videoinput');
   const fxOn = s.bgEffect !== 'none' || s.filter !== 'none' || s.lowLightBoost || s.autoFrame || s.sticker !== 'none';
+  const transcriptLines = stores?.captions.transcript.length ?? 0;
 
   const micMenu: MenuSection[] = [
     {
@@ -735,7 +742,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
     {
       items: [
         { label: 'Voice changer', icon: <AudioLines size={16} />, hint: s.voiceFx !== 'none' ? s.voiceFx : undefined, onClick: () => openActivity('voice'), testId: 'menu-voice' },
-        { label: 'Audio settings', icon: <Speaker size={16} />, onClick: () => setSettingsTab('audio'), testId: 'menu-audio-settings' },
+        { label: 'Audio settings', icon: <Speaker size={16} />, onClick: () => setSettings('audio'), testId: 'menu-audio-settings' },
       ],
     },
   ];
@@ -754,14 +761,18 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
           testId: 'menu-blur',
         },
         {
-          label: s.sticker === 'none' ? 'Face stickers…' : 'Remove face sticker',
+          label: s.sticker === 'none' ? 'Face stickers' : 'Remove face sticker',
           icon: <SmilePlus size={16} />,
-          onClick: () => (s.sticker === 'none' ? setSettingsTab('effects') : updateSettings({ sticker: 'none' })),
+          onClick: () => (s.sticker === 'none' ? setSettings('effects') : updateSettings({ sticker: 'none' })),
           testId: 'menu-stickers',
         },
         { label: s.autoFrame ? 'Turn off auto-framing' : 'Auto-framing', icon: <ScanFace size={16} />, onClick: () => updateSettings({ autoFrame: !s.autoFrame }) },
-        { label: 'Backgrounds & filters…', icon: <Sparkles size={16} />, hint: fxOn ? 'on' : undefined, onClick: () => setSettingsTab('effects'), testId: 'ctrl-effects' },
-        { label: 'Video settings', icon: <SettingsIcon size={16} />, onClick: () => setSettingsTab('video'), testId: 'menu-video-settings' },
+      ],
+    },
+    {
+      items: [
+        { label: 'Backgrounds & effects', icon: <Sparkles size={16} />, hint: fxOn ? 'on' : undefined, onClick: () => setSettings('effects'), testId: 'ctrl-effects' },
+        { label: 'Video settings', icon: <SettingsIcon size={16} />, onClick: () => setSettings('video'), testId: 'menu-video-settings' },
       ],
     },
   ];
@@ -769,17 +780,30 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
     {
       items: [
         {
-          label: me.recording ? 'Stop recording' : 'Record call',
+          label: me.recording ? 'Stop recording' : 'Record the call',
           icon: me.recording ? <Square size={16} /> : <Circle size={16} />,
           onClick: toggleRecording,
           danger: me.recording,
           testId: 'more-record',
         },
-        { label: 'Group photo', icon: <Camera size={16} />, onClick: () => void groupPhoto(), testId: 'more-photo' },
+        { label: 'Take a group photo', icon: <Camera size={16} />, onClick: () => void groupPhoto(), testId: 'more-photo' },
+        ...(captionsSupported()
+          ? [{ label: me.captions ? 'Turn off captions' : 'Live captions', icon: <Captions size={16} />, onClick: toggleCaptions, testId: 'more-captions' }]
+          : []),
+        ...(transcriptLines > 0
+          ? [
+              {
+                label: 'Download transcript',
+                icon: <FileText size={16} />,
+                hint: `${transcriptLines} lines`,
+                onClick: () => stores?.captions.downloadTranscript(session.code),
+                testId: 'more-transcript',
+              },
+            ]
+          : []),
         ...(local.canShareScreen
           ? [{ label: local.screen ? 'Stop presenting' : 'Present your screen', icon: <MonitorUp size={16} />, onClick: () => void toggleScreen(), className: 'show-xs' }]
           : []),
-        ...(captionsSupported() ? [{ label: me.captions ? 'Turn off captions' : 'Live captions', icon: <Captions size={16} />, onClick: toggleCaptions, className: 'show-xs' }] : []),
       ],
     },
     {
@@ -798,8 +822,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
           ? [{ label: mini.open ? 'Close mini player' : 'Mini player', icon: <PictureInPicture2 size={16} />, onClick: () => (mini.open ? mini.close() : void mini.openMini()), testId: 'ctrl-mini' }]
           : []),
         { label: isFullscreen ? 'Exit fullscreen' : 'Fullscreen', icon: isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />, onClick: toggleFullscreen, testId: 'ctrl-fullscreen' },
-        { label: 'Keyboard shortcuts', icon: <Keyboard size={16} />, hint: '?', onClick: () => setShowShortcuts(true) },
-        { label: 'Settings', icon: <SettingsIcon size={16} />, onClick: () => setSettingsTab('audio'), testId: 'ctrl-settings' },
+        { label: 'Settings', icon: <SettingsIcon size={16} />, onClick: () => setSettings('audio'), testId: 'ctrl-settings' },
       ],
     },
   ];
@@ -808,29 +831,32 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   const micOn = local.micOn && !!local.mic;
   const effectsOn = s.bgEffect !== 'none' || s.filter !== 'none' || s.lowLightBoost || s.sticker !== 'none';
   const hands = snap.participants.filter((p) => p.hand).length;
+  const people = snap.participants.filter((p) => !p.leaving);
+  const recorders = snap.participants.filter((p) => p.recording);
+  const link = meetingUrl(session.code);
+  const panelTitle = panel === 'people' ? 'People' : panel === 'chat' ? 'Chat' : ACTIVITY_TITLES[activityView];
+
+  // Alone in the call: put the invite right on the stage.
+  const inviteCard = (
+    <div className="invite-card" data-testid="invite-card">
+      <QrCode text={link} size={92} testId="invite-card-qr" />
+      <div className="invite-card-text">
+        <b>You're the only one here</b>
+        <span>Send this link to bring people in, or scan the code with a phone.</span>
+        <div className="link-box">
+          <span className="link-text">{link}</span>
+          <button className="btn btn-small btn-primary" onClick={() => void copyLink()} data-testid="invite-card-copy">
+            <Copy size={14} /> Copy link
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
-    <div className={`call ${panel ? 'with-panel' : ''} ${s.compactTiles ? 'compact' : ''}`} ref={root} data-testid="call">
-
+    <div className={`call ${panel ? 'with-panel' : ''}`} ref={root} data-testid="call">
       <div className="call-body">
         <main className="call-stage" ref={stageRef}>
-          <div className="stage-status">
-            {snap.participants.some((p) => p.recording) && (
-              <span className="count-chip rec-chip" title={`Recording: ${snap.participants.filter((p) => p.recording).map((p) => (p.isLocal ? 'you' : p.name)).join(', ')}`} data-testid="rec-chip">
-                <CircleDot size={14} /> REC
-              </span>
-            )}
-            {stores?.timer.running && (
-              <span className="count-chip timer-chip" data-testid="timer-chip">
-                <TimerIcon size={14} /> {formatClock(stores.timer.remaining)}
-              </span>
-            )}
-            {hands > 0 && (
-              <span className="count-chip hand-chip" title="Raised hands">
-                <Hand size={14} /> {hands}
-              </span>
-            )}
-          </div>
           {signalDown && (
             <div className="banner banner-warn">
               <WifiOff size={16} />
@@ -843,7 +869,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
           )}
           {audioBlocked && (
             <button className="banner banner-action" onClick={unblockAudio}>
-              Your browser blocked call audio. Click here to enable sound.
+              Your browser blocked call audio. Click here to turn the sound on.
             </button>
           )}
           {local.screen && (
@@ -859,11 +885,9 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
               store={stores.watch}
               onClose={() => setStageView('grid')}
               onChange={() => openActivity('watch')}
-              strip={snap.participants
-                .filter((p) => !p.leaving)
-                .map((p) => (
-                  <VideoTile key={p.id} tile={{ key: `${p.id}:cam`, kind: 'cam', p }} pinned={false} onPin={() => {}} mirrorSelf={s.mirrorSelf} showDetails={false} compact />
-                ))}
+              strip={people.map((p) => (
+                <VideoTile key={p.id} tile={{ key: `${p.id}:cam`, kind: 'cam', p }} pinned={false} onPin={() => {}} mirrorSelf={s.mirrorSelf} showDetails={false} compact />
+              ))}
             />
           ) : stageView === 'whiteboard' && stores ? (
             <WhiteboardView
@@ -874,18 +898,18 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
               banner={stores.dg.active ? <DrawGuessBanner dg={stores.dg} /> : undefined}
             />
           ) : (
-          <VideoGrid
-            participants={snap.participants}
-            pinned={pinned}
-            onPin={setPinned}
-            mirrorSelf={s.mirrorSelf}
-            showDetails={s.showConnectionDetails}
-            layout={s.layout}
-            activeSpeaker={activeSpeaker}
-            hideSelf={s.hideSelfView}
-            compact={s.compactTiles}
-            onThrow={(t, item) => stores?.fun.throwAt(t, item)}
-          />
+            <VideoGrid
+              participants={snap.participants}
+              pinned={pinned}
+              onPin={setPinned}
+              mirrorSelf={s.mirrorSelf}
+              showDetails={s.showConnectionDetails}
+              layout={s.layout}
+              activeSpeaker={activeSpeaker}
+              hideSelf={s.hideSelfView}
+              onThrow={(t, item) => stores?.fun.throwAt(t, item)}
+              alone={inviteCard}
+            />
           )}
           <ReactionLayer items={floating} />
           {stores && <ThrowLayer fun={stores.fun} />}
@@ -923,21 +947,16 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
               <span className="chat-preview-text">{censor(preview.text)}</span>
             </button>
           )}
-          {ptt && (
-            <div className="ptt-indicator" data-testid="ptt">
-              <Mic size={16} /> Talking (push to talk)
-            </div>
-          )}
         </main>
         {panel && (
           <SidePanel
             tab={panel}
-            onTab={(t) => {
-              // Clicking Activities while on it goes back to the grid.
-              if (t === 'activities' && panel === 'activities') setActivityView('home');
-              setPanel(t);
-            }} onClose={() => setPanel(null)} counts={{ people: snap.participants.filter((p) => !p.leaving).length, unread }}>
-            {panel === 'people' && <ParticipantsPanel participants={snap.participants.filter((p) => !p.leaving)} onCopyLink={() => void copyLink()} />}
+            title={panelTitle}
+            count={panel === 'people' ? people.length : undefined}
+            onBack={panel === 'activities' && activityView !== 'home' ? () => setActivityView('home') : undefined}
+            onClose={() => setPanel(null)}
+          >
+            {panel === 'people' && <ParticipantsPanel participants={people} onCopyLink={() => void copyLink()} />}
             {panel === 'chat' && (
               <ChatPanel
                 messages={snap.messages}
@@ -960,15 +979,9 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
                     setStageView('whiteboard');
                     setPanel(null);
                   },
+                  openEffects: () => setSettings('effects'),
                   polls: stores.polls,
                   timer: stores.timer,
-                  captions: stores.captions,
-                  captionsOn: me.captions,
-                  toggleCaptions,
-                  recording: me.recording,
-                  recordStart: recStart,
-                  toggleRecording,
-                  groupPhoto: () => void groupPhoto(),
                   openGhost: () => setGhostOpen(true),
                   watch: stores.watch,
                   openWatch: () => setStageView('watch'),
@@ -981,13 +994,13 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
         )}
       </div>
 
-      <footer className="call-controls">
-        <div className="controls-left hide-sm">
-          <button className="call-brand" onClick={onLogoClick} aria-label="Yapameet" title="Yapameet" data-testid="call-logo">
-            <Logo size={26} />
+      <footer className="call-bar">
+        <div className="bar-left">
+          <button className="call-logo" onClick={onLogoClick} aria-label="Yapameet" title="Yapameet" data-testid="call-logo">
+            <Logo size={30} />
           </button>
-          <div className="react-wrap">
-            <button className={`meet-chip ${infoOpen ? 'open' : ''}`} onClick={() => setInfoOpen((v) => !v)} title="Meeting info & invite" data-testid="copy-link">
+          <div className="pop-wrap">
+            <button className={`meet-chip ${infoOpen ? 'open' : ''}`} onClick={() => setInfoOpen((v) => !v)} title="Meeting info and invite" data-testid="copy-link">
               <span
                 className={`signal-dot sig-${snap.signal}`}
                 title={`Signaling: ${snap.transport} (${snap.signal}${snap.signalDetail ? `, ${snap.signalDetail}` : ''})`}
@@ -997,99 +1010,121 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
               <span className="mono">{session.code}</span>
               <ChevronUp size={14} />
             </button>
-            {infoOpen && <MeetingInfo code={session.code} people={snap.participants.filter((p) => !p.leaving).length} onClose={() => setInfoOpen(false)} />}
+            {infoOpen && <MeetingInfo code={session.code} people={people.length} onClose={() => setInfoOpen(false)} />}
           </div>
-          <CallClock start={me.joinedAt} showClock={s.showClock} />
+          <Elapsed start={me.joinedAt} />
+          <div className="bar-status">
+            {recorders.length > 0 && (
+              <span className="chip rec-chip" title={`Recording: ${recorders.map((p) => (p.isLocal ? 'you' : p.name)).join(', ')}`} data-testid="rec-chip">
+                <CircleDot size={14} /> REC {recStart > 0 && <RecTime start={recStart} />}
+              </span>
+            )}
+            {stores?.timer.running && (
+              <span className="chip timer-chip" title="Shared timer" data-testid="timer-chip">
+                <TimerIcon size={14} /> {formatClock(stores.timer.remaining)}
+              </span>
+            )}
+            {hands > 0 && (
+              <span className="chip hand-chip" title="Raised hands">
+                <Hand size={14} /> {hands}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="controls-center">
-          <div className="ctrl-group">
-            <div className="ctrl-split">
-              <CtrlButton
-                icon={micOn ? <Mic size={22} /> : <MicOff size={22} />}
-                label={micOn ? 'Mute (Ctrl+D)' : 'Unmute (Ctrl+D)'}
-                off={!micOn}
-                onClick={() => void toggleMic()}
-                testId="ctrl-mic"
-              />
-              <button className={`ctrl-caret ${menu === 'mic' ? 'open' : ''}`} onClick={() => setMenu(menu === 'mic' ? null : 'mic')} aria-label="Audio options" title="Audio options" data-testid="ctrl-mic-menu">
-                <ChevronUp size={16} />
-              </button>
-              {menu === 'mic' && <Menu sections={micMenu} onClose={() => setMenu(null)} align="left" testId="mic-menu" anchorTestId="ctrl-mic-menu" />}
-            </div>
-            <div className="ctrl-split">
-              <CtrlButton
-                icon={local.camOn ? <Video size={22} /> : <VideoOff size={22} />}
-                label={local.camOn ? 'Turn camera off (Ctrl+E)' : 'Turn camera on (Ctrl+E)'}
-                off={!local.camOn}
-                onClick={() => void toggleCam()}
-                testId="ctrl-cam"
-              />
-              <button className={`ctrl-caret ${menu === 'cam' ? 'open' : ''} ${effectsOn ? 'fx' : ''}`} onClick={() => setMenu(menu === 'cam' ? null : 'cam')} aria-label="Video options" title="Video & effects" data-testid="ctrl-cam-menu">
-                <ChevronUp size={16} />
-              </button>
-              {menu === 'cam' && <Menu sections={camMenu} onClose={() => setMenu(null)} align="left" testId="cam-menu" anchorTestId="ctrl-cam-menu" />}
-            </div>
+
+        <div className="dock">
+          <div className="ctrl-split">
+            <CtrlButton
+              icon={micOn ? <Mic size={22} /> : <MicOff size={22} />}
+              label={ptt ? 'Talking (let go of Space to mute)' : micOn ? 'Mute (Ctrl+D)' : 'Unmute (Ctrl+D)'}
+              off={!micOn}
+              onClick={() => void toggleMic()}
+              testId="ctrl-mic"
+              className={ptt ? 'ptt' : undefined}
+              extra={micOn ? <MicPulse id={session.selfId} /> : undefined}
+            />
+            <button className={`ctrl-caret ${menu === 'mic' ? 'open' : ''}`} onClick={() => setMenu(menu === 'mic' ? null : 'mic')} aria-label="Audio options" title="Audio options" data-testid="ctrl-mic-menu">
+              <ChevronUp size={15} />
+            </button>
+            {menu === 'mic' && <Menu sections={micMenu} onClose={() => setMenu(null)} align="left" testId="mic-menu" anchorTestId="ctrl-mic-menu" />}
           </div>
-          <div className="ctrl-group">
-            {captionsSupported() && (
-              <CtrlButton icon={<Captions size={22} />} label={me.captions ? 'Turn off captions' : 'Turn on live captions'} active={me.captions} onClick={toggleCaptions} testId="ctrl-cc" className="hide-xs" />
-            )}
-            <div className="react-wrap">
-              <CtrlButton icon={<SmilePlus size={22} />} label="Send a reaction" active={picker} onClick={() => setPicker((v) => !v)} testId="ctrl-react" />
-              {picker && <ReactionPicker onPick={(e) => session.react(e)} onClose={() => setPicker(false)} />}
-            </div>
-            <CtrlButton icon={<Hand size={22} />} label={session.hand ? 'Lower hand (Ctrl+Alt+H)' : 'Raise hand (Ctrl+Alt+H)'} active={me.hand} onClick={toggleHand} testId="ctrl-hand" />
-            {s.eggs.includes('omar') && (
-              <CtrlButton
-                icon={<Zap size={22} />}
-                label={me.vanish ? 'Lightning Vanish (you are gone right now)' : 'Lightning Vanish'}
-                active={!!me.vanish || vanishOpen}
-                onClick={() => !me.vanish && setVanishOpen(true)}
-                testId="ctrl-vanish"
-                className="vanish-btn"
-              />
-            )}
-            {local.canShareScreen && (
-              <CtrlButton
-                icon={local.screen ? <MonitorOff size={22} /> : <MonitorUp size={22} />}
-                label={local.screen ? 'Stop presenting' : 'Present your screen'}
-                active={!!local.screen}
-                onClick={() => void toggleScreen()}
-                testId="ctrl-screen"
-                className="hide-xs"
-              />
-            )}
-            <div className="react-wrap">
-              <CtrlButton icon={<MoreVertical size={22} />} label="More options" active={menu === 'more'} onClick={() => setMenu(menu === 'more' ? null : 'more')} testId="ctrl-more" />
-              {menu === 'more' && <Menu sections={moreMenu} onClose={() => setMenu(null)} align="center" testId="more-menu" anchorTestId="ctrl-more" />}
-            </div>
+          <div className="ctrl-split">
+            <CtrlButton
+              icon={local.camOn ? <Video size={22} /> : <VideoOff size={22} />}
+              label={local.camOn ? 'Turn camera off (Ctrl+E)' : 'Turn camera on (Ctrl+E)'}
+              off={!local.camOn}
+              onClick={() => void toggleCam()}
+              testId="ctrl-cam"
+            />
+            <button
+              className={`ctrl-caret ${menu === 'cam' ? 'open' : ''} ${effectsOn ? 'fx' : ''}`}
+              onClick={() => setMenu(menu === 'cam' ? null : 'cam')}
+              aria-label="Video options"
+              title="Video and effects"
+              data-testid="ctrl-cam-menu"
+            >
+              <ChevronUp size={15} />
+            </button>
+            {menu === 'cam' && <Menu sections={camMenu} onClose={() => setMenu(null)} align="left" testId="cam-menu" anchorTestId="ctrl-cam-menu" />}
           </div>
+          <span className="dock-sep" aria-hidden="true" />
+          {local.canShareScreen && (
+            <CtrlButton
+              icon={local.screen ? <MonitorOff size={22} /> : <MonitorUp size={22} />}
+              label={local.screen ? 'Stop presenting' : 'Present your screen'}
+              active={!!local.screen}
+              onClick={() => void toggleScreen()}
+              testId="ctrl-screen"
+              className="hide-xs"
+            />
+          )}
+          <div className="pop-wrap">
+            <CtrlButton icon={<SmilePlus size={22} />} label="Send a reaction" active={picker} onClick={() => setPicker((v) => !v)} testId="ctrl-react" />
+            {picker && <ReactionPicker onPick={(e) => session.react(e)} onClose={() => setPicker(false)} />}
+          </div>
+          <CtrlButton icon={<Hand size={22} />} label={session.hand ? 'Lower hand (Ctrl+Alt+H)' : 'Raise hand (Ctrl+Alt+H)'} active={me.hand} onClick={toggleHand} testId="ctrl-hand" className="hand-btn" />
+          {s.eggs.includes('omar') && (
+            <CtrlButton
+              icon={<Zap size={22} />}
+              label={me.vanish ? 'Lightning Vanish (you are gone right now)' : 'Lightning Vanish'}
+              active={!!me.vanish || vanishOpen}
+              onClick={() => !me.vanish && setVanishOpen(true)}
+              testId="ctrl-vanish"
+              className="vanish-btn"
+            />
+          )}
+          <div className="pop-wrap">
+            <CtrlButton icon={<MoreVertical size={22} />} label="More options" active={menu === 'more'} onClick={() => setMenu(menu === 'more' ? null : 'more')} testId="ctrl-more" />
+            {menu === 'more' && <Menu sections={moreMenu} onClose={() => setMenu(null)} align="center" testId="more-menu" anchorTestId="ctrl-more" />}
+          </div>
+          <span className="dock-sep" aria-hidden="true" />
           <CtrlButton icon={<PhoneOff size={22} />} label="Leave call" danger onClick={onLeave} testId="ctrl-leave" />
         </div>
-        <div className="controls-right">
+
+        <div className="bar-right">
           <CtrlButton
-            icon={<LayoutGrid size={22} />}
-            label="Activities: watch together, whiteboard, polls, soundboard…"
+            icon={<Shapes size={20} />}
+            label="Activities: games, watch together, whiteboard, soundboard and more"
             text="Activities"
             active={panel === 'activities'}
             badge={local.playingSounds.size ? '♪' : stores?.watch.src ? '▶' : undefined}
             onClick={() => (panel === 'activities' ? setPanel(null) : openActivity(activityView))}
             testId="ctrl-tools"
+            className="act-btn"
           />
           <CtrlButton
-            icon={<Users size={22} />}
+            icon={<Users size={20} />}
             label="People"
-            text="People"
+            text={String(people.length)}
+            textTestId="participant-count"
             active={panel === 'people'}
-            badge={snap.participants.filter((p) => !p.leaving).length}
-            badgeTestId="participant-count"
             onClick={() => setPanel(panel === 'people' ? null : 'people')}
             testId="ctrl-people"
+            className="keep-text"
           />
           <CtrlButton
-            icon={<MessageSquare size={22} />}
+            icon={<MessageSquare size={20} />}
             label="Chat (Ctrl+Alt+C)"
-            text="Chat"
             active={panel === 'chat'}
             badge={unread ? (unread > 9 ? '9+' : unread) : undefined}
             onClick={() => setPanel(panel === 'chat' ? null : 'chat')}
@@ -1105,72 +1140,14 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
         </span>
       ))}
 
-      {settingsTab && (
-        <Modal title="Settings" onClose={() => setSettingsTab(null)} wide>
-          <div className="tabs tabs-scroll" role="tablist">
-            {(['audio', 'video', 'effects', 'appearance', 'meeting', 'general'] as const).map((t) => (
-              <button key={t} role="tab" aria-selected={settingsTab === t} className={settingsTab === t ? 'active' : ''} onClick={() => setSettingsTab(t)}>
-                {{ audio: 'Audio', video: 'Video', effects: 'Backgrounds & filters', appearance: 'Appearance', meeting: 'Meetings', general: 'Profile' }[t]}
-              </button>
-            ))}
-          </div>
-          {settingsTab === 'audio' && <AudioPanel local={local} />}
-          {settingsTab === 'video' && <VideoPanel local={local} />}
-          {settingsTab === 'effects' && <EffectsPanel local={local} />}
-          {settingsTab === 'appearance' && <AppearancePanel />}
-          {settingsTab === 'meeting' && <MeetingPanel />}
-          {settingsTab === 'general' && (
-            <div className="device-panel">
-              <section className="panel-section">
-                <h3>Profile picture</h3>
-                <PfpEditor name={me.name} track={local.rawCam} />
-              </section>
-              <section className="panel-section">
-                <label className="field">
-                  <span>Display name</span>
-                  <div className="row-with-button">
-                    <input value={nameDraft} maxLength={40} onChange={(e) => setNameDraft(e.target.value)} />
-                    <button
-                      className="btn btn-small"
-                      disabled={!nameDraft.trim() || nameDraft.trim() === me.name}
-                      onClick={() => {
-                        session.setName(nameDraft);
-                        updateSettings({ displayName: nameDraft.trim() });
-                        toast('Name updated', 'success');
-                      }}
-                    >
-                      Save
-                    </button>
-                  </div>
-                </label>
-                <Toggle
-                  label="Show connection stats on tiles"
-                  hint="Resolution, fps, bitrate, delay and codec"
-                  checked={s.showConnectionDetails}
-                  onChange={(v) => updateSettings({ showConnectionDetails: v })}
-                />
-                <p className="muted small">
-                  Signaling: {snap.transport}. Status: {snap.signal}
-                  {snap.signalDetail ? ` (${snap.signalDetail})` : ''}.
-                </p>
-              </section>
-            </div>
-          )}
+      {settings && (
+        <Modal title="Settings" onClose={() => setSettings(null)} size="xl">
+          <SettingsView local={local} session={session} section={settings} onSection={setSettings} />
         </Modal>
       )}
-
       {showShortcuts && (
         <Modal title="Keyboard shortcuts" onClose={() => setShowShortcuts(false)}>
-          <ul className="shortcuts" data-testid="shortcuts">
-            <li><kbd>Ctrl</kbd>+<kbd>D</kbd> Mute / unmute</li>
-            <li><kbd>Ctrl</kbd>+<kbd>E</kbd> Camera on / off</li>
-            <li><kbd>Space</kbd> (hold, while muted) Push to talk</li>
-            <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> Raise / lower hand</li>
-            <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd> Open chat</li>
-            <li><kbd>1</kbd>-<kbd>9</kbd> Soundboard pads (Tools open)</li>
-            <li><kbd>?</kbd> This list</li>
-            <li><kbd>Esc</kbd> Close dialogs</li>
-          </ul>
+          <ShortcutList />
         </Modal>
       )}
       {spin && <SpinOverlay key={spin.key} spin={spin} onDone={() => setSpin(null)} />}

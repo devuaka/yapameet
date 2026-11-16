@@ -35,8 +35,6 @@ export function parseMeetingInput(input: string): string | null {
   return s;
 }
 
-export const isStrongCode = (code: string) => /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(code);
-
 export function meetingUrl(code: string): string {
   const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   return `${window.location.origin}${base}/meeting/${code}`;

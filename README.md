@@ -14,31 +14,31 @@ Free, browser-based video meetings. Create a link, send it, talk. No accounts, n
 - Responsive on desktop, tablet and phone; keyboard shortcuts Ctrl+D (mic) and Ctrl+E (camera)
 - **Quality presets** up to 1080p60, codec choice (VP8/VP9/H.264/AV1), low-latency mode, live per-tile stats (resolution, fps, bitrate, delay, codec)
 - **Background blur / replacement** (8 built-in scenes + your own uploads) and **12 filters** plus low-light boost. Runs on your device with MediaPipe selfie segmentation; your real background is never sent while effects load
-- **11 themes** (2 secret), reduce-motion, compact tiles, layout modes (auto / grid / active speaker), hide self view
+- **11 themes** (2 secret), reduce-motion, layout modes (auto / grid / active speaker), hide self view
 - **Reactions**, **raise hand**, **push to talk** (hold Space while muted), "you're muted" warning
-- **Soundboard**: 8 built-in synthesized sounds + upload your own MP3/WAV/OGG/M4A (stored on your device). Everyone hears them, even while you're muted
+- **Soundboard**: 12 built-in recorded sounds + upload your own MP3/WAV/OGG/M4A (stored on your device). Everyone hears them, even while you're muted
 - **Mini player**: switch tabs during a call and Chrome/Edge pop out a floating window with the call and your controls (Document Picture-in-Picture + Media Session auto-PiP, like Meet); there's also a manual button
 - **Invite by QR**: the meeting chip (bottom left) opens a card with the code, link and a QR code to join from a phone; call length timer next to it
 - **See who is here before you join**: the join screen shows who is already in the call
-- **Home page** greets you with your picture and lists recent meetings for one-click rejoin
+- **Home page** with one bar for both jobs (New meeting, or paste a code/link), your recent meetings for one-click rejoin, and your picture in the corner
 - **Games** (Activities > Games): Draw & Guess (Pictionary-style on the shared whiteboard, private guessing, scores), Spin the wheel, Rock Paper Scissors duels, Would You Rather
 - **Throw stuff** at people: hover a video, hit 🍅 (tomato, egg, pie, slime, snowball, shoe, hearts, flowers) and it splats on their tile for everyone
 - **Face stickers**: shades, crown, top hat, party hat, clown nose, cat ears, devil horns, halo, heart eyes, mustache; tracked to your face (MediaPipe) so everyone sees them
 - **Watch together**: paste a YouTube link or a catbox.moe / litterbox (or any direct .mp4/.webm) link; play, pause and seeking are synced for everyone, drift is corrected automatically, the end of the video stops everyone, late joiners jump in at the right spot
 - **Swear filter** (on by default, per person) for chat, captions, polls and transcripts. Live voice can't be filtered: speech recognition only knows a word after everyone heard it
 - **Hear myself** toggle for the voice changer (use headphones)
-- **Organised call screen**: Mic ▾ and Camera ▾ dropdowns (devices, speakers, quick blur, auto-framing, voice changer), a ⋮ More menu for everything else, and one side panel with People / Chat / Activities tabs; Activities is a launcher where every tool has its own page
+- **Organised call screen**: one bottom bar. Left: the meeting chip (invite card with QR), call length and status chips (recording, timer, raised hands). Middle: the dock with Mic ▾ and Camera ▾ dropdowns (devices, speakers, quick blur, stickers, auto-framing, voice changer), present, reactions, raise hand, a ⋮ More menu (record, group photo, captions, layout, mini player, fullscreen, settings) and leave. Right: Activities, People and Chat, which all open in the same side panel
 - **Collaborative whiteboard** (pen, highlighter, eraser, colors, undo, clear, save as PNG); people who join late get the current board
 - **Polls** with live results (named or anonymous) and a **shared countdown timer**
 - **Live captions** with speaker names and a downloadable transcript (each person's own browser transcribes their own mic; Chrome/Edge)
 - **Record the call** to a local .webm (everyone sees a REC indicator) and **group photo** to PNG
 - **Voice changer**: robot, chipmunk, deep, alien, radio, megaphone, cave
 - **Auto-framing** that zooms in and follows you; **signal-strength bars** on every tile; `?` shows all shortcuts
-- **Tools panel** with every fun effect: confetti, party mode, barrel roll, Ghost Protocol, dice, coin
+- **Quick fun** (Activities > Games): confetti, party mode, barrel roll, Ghost Protocol, dice, coin
 - **Chat** with emoji picker, typing indicators, new-message previews and slash commands (`/help`)
 - **Easter eggs** (Settings > Secrets tracks what you've found). The headline one, Ghost Protocol: photograph your empty room and when you leave, everyone watches you fade out of it
 
-Pages: Landing (`/`), Create meeting (`/new`), Join (`/join`), Meeting (`/meeting/abc-defg-hij`), Settings (`/settings`).
+Pages: Home (`/`), Meeting (`/meeting/abc-defg-hij`: lobby, call, and the "you left" screen), Settings (`/settings`). `/new` starts a fresh meeting and `/join?code=...` jumps to one, so old links keep working.
 
 ---
 
@@ -98,7 +98,7 @@ To try a call by yourself, open the meeting link in a second browser (for exampl
 
 ### How a meeting works
 
-1. **Create:** `/new` generates a random code like `kpr-tamq-hzx`. Nothing is registered anywhere. A meeting is just a code; it "exists" whenever someone is connected to its channel. Links work forever.
+1. **Create:** "New meeting" generates a random code like `kpr-tamq-hzx` and takes you straight to its lobby, where the invite link and QR code are. Nothing is registered anywhere. A meeting is just a code; it "exists" whenever someone is connected to its channel. Links work forever.
 2. **Pre-join:** the meeting page asks for your name and shows a camera/mic preview. Mic and camera are requested separately, so a missing or blocked camera doesn't block your mic (and you can join with neither, to watch and chat).
 3. **Announce:** on joining you subscribe to the room channel and broadcast `hello` with your name and mic/camera state. Everyone already there replies directly to you.
 4. **Connect:** for each pair, the peer with the lower random id is the **initiator**. It creates the connection with a fixed layout of four transceivers (mic, camera, screen video, screen audio) and sends an offer; the other side adopts that layout and answers. ICE candidates are batched and trickled. Only one side ever offers, so there is no offer collision.
@@ -121,8 +121,10 @@ src/
     LocalMedia.ts           mic/camera/screen tracks, devices, permission errors
     MeetingSession.ts       mesh: peers, offers/answers/ICE, recovery, chat, snapshot for React
   lib/                      crypto, meeting codes, settings, sounds, speaking detection, hooks
-  components/               call view, video grid/tiles, chat, people, pre-join, device panel
-  pages/                    Landing, NewMeeting, Join, Meeting, Settings
+  components/               call view, video grid/tiles, side panel (people, chat, activities), lobby, settings
+  pages/                    Landing, Meeting, Settings, NotFound
+  styles/                   tokens.css (colours + 11 themes), base.css (buttons, fields, modal, menu),
+                            site.css (home, lobby, settings), call.css, activities.css, fx.css
 functions/api/turn.ts       optional Cloudflare Pages Function minting TURN credentials
 tests/e2e.mjs               two-browser end-to-end test
 ```
@@ -228,7 +230,7 @@ Being honest about what $0 buys:
 
 `tests/e2e.mjs` launches **two separate browser processes (Chrome and Edge, separate profiles)** with Chromium's fake camera/mic devices, joins the same meeting through the real public signaling service, and verifies real media:
 
-- create meeting, join by pasted link (uppercase, via the Join page)
+- create meeting, join by pasted link (uppercase, via the home page)
 - both sides connected, remote video frames advancing, inbound audio energy increasing, speaking ring
 - mute (zero audio energy received while muted) / unmute, camera off (device released) / on
 - switching camera and microphone mid-call (checks the peer connection sends the new track)
@@ -261,4 +263,4 @@ Two notes from writing the test:
 
 ## Credits
 
-Sound effects are real recordings from [Mixkit](https://mixkit.co/free-sound-effects/) under the Mixkit Sound Effects Free License (public/sfx). Background segmentation and face tracking use Google MediaPipe models.
+Sound effects are real recordings from [Mixkit](https://mixkit.co/free-sound-effects/) under the Mixkit Sound Effects Free License (public/sfx). Background segmentation and face tracking use Google MediaPipe models. Fonts are Inter and Bricolage Grotesque (SIL Open Font License), bundled through Fontsource. Icons are Lucide.
