@@ -960,3 +960,45 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* ---------------------------------------------------------------- secret commands */
+.cmd-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 12px;
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cmd-form:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+.cmd-form svg {
+  flex: none;
+}
+.cmd-form input,
+.cmd-form input:focus {
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+.cmd-result {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--danger-text);
+}
+.cmd-result.ok {
+  color: var(--ok);
+}

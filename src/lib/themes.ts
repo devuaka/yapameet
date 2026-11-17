@@ -68,7 +68,13 @@ export const EGGS: EggInfo[] = [
   {
     id: 'omar',
     name: 'Lightning Vanish',
-    hint: 'Some programs only run from the chat box.',
-    found: 'Type omar123.exe in the meeting chat. Unlocks the ⚡ button: snap your empty room, get struck by lightning and vanish for 15 seconds.',
+    hint: 'The Commands box at the bottom of Games knows a word for what comes before thunder.',
+    found: 'Type lightning in Activities > Games > Commands. Unlocks the ⚡ button: snap your empty room, get struck by lightning and vanish for 15 seconds.',
+  },
+  {
+    id: 'evilflower',
+    name: 'Evil Flower',
+    hint: 'Some flowers just want to watch the world party. Ask the Commands box.',
+    found: 'Type evilflower in Commands: an evil party with a cackle on everyone\'s screen. Type it again to stop it.',
   },
 ];

@@ -31,7 +31,7 @@ export type FilterId =
   | 'pixel';
 export type VoiceFx = 'none' | 'robot' | 'chipmunk' | 'deep' | 'alien' | 'radio' | 'megaphone' | 'cave';
 export type LayoutPref = 'auto' | 'grid' | 'speaker';
-export type EggId = 'ghost' | 'konami' | 'barrelroll' | 'bubblegum' | 'party' | 'gaben' | 'omar';
+export type EggId = 'ghost' | 'konami' | 'barrelroll' | 'bubblegum' | 'party' | 'gaben' | 'omar' | 'evilflower';
 
 export interface Settings {
   displayName: string;

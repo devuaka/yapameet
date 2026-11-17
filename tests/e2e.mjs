@@ -1285,14 +1285,36 @@ async function main() {
       }
     });
 
-    await step('Secret toy: omar123.exe unlocks Lightning Vanish, A is struck and vanishes for B, then comes back', async () => {
-      if (!(await A.page.locator('[data-testid="chat-input"]').count())) await A.page.locator('[data-testid="ctrl-chat"]').click();
-      await A.page.locator('[data-testid="chat-input"]').fill('omar123.exe');
-      await A.page.locator('[data-testid="chat-input"]').press('Enter');
+    await step('Commands: "evilflower" toggles an evil party with a laugh on both screens', async () => {
+      await openTools(A.page, 'games');
+      await A.page.locator('[data-testid="cmd-input"]').fill('nonsense');
+      await A.page.locator('[data-testid="cmd-run"]').click();
+      if (!(await A.page.locator('[data-testid="cmd-result"]').innerText()).includes('Nothing happened')) throw new Error('unknown command not rejected');
+      await A.page.locator('[data-testid="cmd-input"]').fill('evilflower');
+      await A.page.locator('[data-testid="cmd-run"]').click();
+      const isEvil = (p) => p.evaluate(() => document.documentElement.classList.contains('fx-evil'));
+      await until(async () => (await isEvil(A.page)) && (await isEvil(B.page)), { what: 'evil party on both' });
+      await B.page.locator('[data-testid="evil-chip"]').waitFor({ timeout: 5000 });
+      const laugh = await B.page.evaluate(async () => {
+        const r = await fetch('/sfx/egg-evilflower.mp3');
+        return r.ok ? (await new AudioContext().decodeAudioData(await r.arrayBuffer())).duration : 0;
+      });
+      if (laugh < 3) throw new Error('laugh clip missing on B');
+      await A.page.locator('[data-testid="cmd-input"]').fill('EvilFlower');
+      await A.page.locator('[data-testid="cmd-run"]').click();
+      await until(async () => !(await isEvil(A.page)) && !(await isEvil(B.page)), { what: 'evil party off on both' });
+      return `on and off for both, laugh ${laugh.toFixed(1)} s`;
+    });
+
+    await step('Secret toy: "lightning" in Commands unlocks Lightning Vanish, A is struck and vanishes for B, then comes back', async () => {
+      await openTools(A.page, 'games');
+      await A.page.locator('[data-testid="cmd-input"]').fill('lightning');
+      await A.page.locator('[data-testid="cmd-run"]').click();
       await A.page.locator('[data-testid="ctrl-vanish"]').waitFor({ timeout: 5000 });
+      await closeSide(A.page);
       const saved = await A.page.evaluate(() => JSON.parse(localStorage.getItem('yapameet:settings:v1') || '{}').eggs || []);
       if (!saved.includes('omar')) throw new Error('unlock was not saved');
-      const leaked = await B.page.evaluate(() => window.__yapameet.getSnapshot().messages.some((m) => /omar123/i.test(m.text)));
+      const leaked = await B.page.evaluate(() => window.__yapameet.getSnapshot().messages.some((m) => /lightning/i.test(m.text)));
       if (leaked) throw new Error('the secret code was sent to B');
       if (await B.page.locator('[data-testid="ctrl-vanish"]').count()) throw new Error('B got the button without unlocking');
       await A.page.locator('[data-testid="ctrl-vanish"]').click();

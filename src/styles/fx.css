@@ -24,7 +24,9 @@ html.fx-barrelroll #root {
   }
 }
 html.fx-party .tile video,
-html.fx-party .tile .tile-avatar {
+html.fx-party .tile .tile-avatar,
+html.fx-evil .tile video,
+html.fx-evil .tile .tile-avatar {
   animation: party-hue 1.2s linear infinite;
 }
 html.fx-party .call::before {
@@ -726,4 +728,45 @@ html.fx-flash body::before {
   .dg-feed {
     display: none;
   }
+}
+
+/* ---------------------------------------------------------------- evil flower */
+html.fx-evil .call::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 28%, rgba(132, 255, 0, 0.26), transparent 32%),
+    radial-gradient(circle at 82% 36%, rgba(168, 0, 255, 0.3), transparent 32%),
+    radial-gradient(circle at 50% 82%, rgba(255, 0, 60, 0.24), transparent 32%);
+  mix-blend-mode: screen;
+  animation: disco 0.7s steps(4) infinite;
+}
+html.fx-evil .call::after {
+  content: '🌸';
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  z-index: 41;
+  font-size: 120px;
+  pointer-events: none;
+  filter: drop-shadow(0 0 30px rgba(168, 0, 255, 0.8)) hue-rotate(60deg);
+  animation: evil-spin 2.4s linear infinite;
+  opacity: 0.35;
+}
+@keyframes evil-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) rotate(180deg) scale(1.25);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg) scale(1);
+  }
+}
+.evil-chip {
+  background: linear-gradient(135deg, #7c3aed, #16a34a);
 }

@@ -63,7 +63,8 @@ import { Modal } from './controls';
 import { SettingsView, ShortcutList, type SettingsSection } from './SettingsPanels';
 import { GhostDialog } from './GhostDialog';
 import { VanishDialog } from './VanishDialog';
-import { VANISH_CODE } from '../lib/vanish';
+import { EVIL_CODE, VANISH_CODE } from '../lib/vanish';
+import { evilPartyOn, startEvilParty, stopEvilParty } from '../lib/evilflower';
 import { RemoteAudio } from './media';
 import { ParticipantsPanel } from './ParticipantsPanel';
 import { miniPlayerSupported, useMiniPlayer } from './MiniPlayer';
@@ -642,14 +643,6 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
   // Chat with slash commands (and a couple of hidden ones).
   const onSend = (raw: string) => {
     const text = raw.trim();
-    // Secret toy unlock. Never sent, so nobody else learns the code.
-    if (VANISH_CODE.test(text)) {
-      if (findEgg('omar')) {
-        sounds.secret();
-        toast('⚡ Secret toy unlocked: Lightning Vanish. Hit the ⚡ button!', 'success');
-      } else toast('You already have Lightning Vanish. Hit the ⚡ button.');
-      return;
-    }
     if (/do a barrel roll/i.test(text)) {
       session.sendChat(text);
       session.sendFx('barrelroll');
@@ -711,6 +704,57 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
         session.addNote(`Unknown command /${cmd}. Type /help.`);
     }
   };
+
+  // Evil Flower: an endless party with a cackle, switched on and off for everyone at once.
+  const [evil, setEvil] = useState(false);
+  const setEvilParty = useCallback((on: boolean) => {
+    if (on) void startEvilParty();
+    else stopEvilParty();
+    setEvil(on);
+  }, []);
+  useEffect(
+    () =>
+      session.onEvent((e) => {
+        if (e.type === 'app' && e.kind === 'evilparty') {
+          const on = !!(e.data as { on?: boolean } | null)?.on;
+          if (on === evilPartyOn()) return;
+          setEvilParty(on);
+          if (!e.isLocal) toast(on ? `🌸 ${e.name} planted an evil flower` : `🥀 ${e.name} stopped the evil party`);
+        } else if (e.type === 'peer-ready' && evilPartyOn()) {
+          // Late joiners get dragged into the party too.
+          session.sendApp('evilparty', { on: true }, e.from);
+        }
+      }),
+    [session, setEvilParty, toast],
+  );
+  useEffect(() => () => stopEvilParty(), []);
+
+  // Secret commands (Activities > Games > Commands). Never sent, so nobody learns the words.
+  const runCommand = useCallback(
+    (raw: string): { ok: boolean; text: string } => {
+      const text = raw.trim();
+      if (VANISH_CODE.test(text)) {
+        if (findEgg('omar')) {
+          sounds.secret();
+          toast('⚡ Secret toy unlocked: Lightning Vanish. Hit the ⚡ button!', 'success');
+          return { ok: true, text: '⚡ Lightning Vanish unlocked. The ⚡ button is in the bar.' };
+        }
+        return { ok: true, text: 'You already have Lightning Vanish. Hit the ⚡ button.' };
+      }
+      if (EVIL_CODE.test(text)) {
+        const on = !evilPartyOn();
+        if (on && findEgg('evilflower')) {
+          sounds.secret();
+          toast('🌸 Secret found: Evil Flower', 'success');
+        }
+        setEvilParty(on);
+        session.sendApp('evilparty', { on });
+        return { ok: true, text: on ? '🌸 Evil party on for everyone. Type evilflower again to stop it.' : '🥀 Evil party over.' };
+      }
+      return { ok: false, text: 'Nothing happened. That is not a command.' };
+    },
+    [session, setEvilParty, toast],
+  );
 
   const onAudioBlocked = useCallback(() => setAudioBlocked(true), []);
   const unblockAudio = () => {
@@ -983,6 +1027,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
                   polls: stores.polls,
                   timer: stores.timer,
                   openGhost: () => setGhostOpen(true),
+                  runCommand,
                   watch: stores.watch,
                   openWatch: () => setStageView('watch'),
                   dg: stores.dg,
@@ -1022,6 +1067,11 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             {stores?.timer.running && (
               <span className="chip timer-chip" title="Shared timer" data-testid="timer-chip">
                 <TimerIcon size={14} /> {formatClock(stores.timer.remaining)}
+              </span>
+            )}
+            {evil && (
+              <span className="chip evil-chip" title="Evil party (type evilflower in Commands to stop it)" data-testid="evil-chip">
+                🌸 Evil party
               </span>
             )}
             {hands > 0 && (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Secret toy "Lightning Vanish" (unlocked by typing omar123.exe in the chat).
+ * Secret toy "Lightning Vanish" (unlocked by typing lightning in Activities > Games > Commands).
  * You photograph your empty room, step back in, get struck by lightning and
  * vanish: everyone sees only your empty room for 15 seconds, then you fade back.
  * Times are milliseconds from the strike.
@@ -11,7 +11,8 @@ export const GONE_MS = 15_000; // only the empty room is shown
 export const BACK_MS = 800; // the room photo fades away and you are back
 export const VANISH_TOTAL_MS = STRIKE_MS + GONE_MS + BACK_MS;
 
-export const VANISH_CODE = /^omar123\.exe$/i;
+export const VANISH_CODE = /^lightning$/i;
+export const EVIL_CODE = /^evilflower$/i;
 
 export interface Vanish {
   photo: string;

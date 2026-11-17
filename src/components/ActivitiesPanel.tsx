@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   AudioLines,
+  SquareTerminal,
   BarChart3,
   Clapperboard,
   Coins,
@@ -54,6 +55,8 @@ export interface ActivityFeatures {
   polls: PollStore;
   timer: TimerStore;
   openGhost: () => void;
+  /** Secret commands typed into the box at the bottom of Games. Returns what happened. */
+  runCommand: (text: string) => { ok: boolean; text: string };
   watch: WatchStore;
   openWatch: () => void;
   dg: DrawGuessStore;
@@ -108,6 +111,7 @@ export function ActivitiesPanel({
             <>
               <GamesView dg={features.dg} fun={features.fun} polls={features.polls} participants={participants} />
               <FunView session={session} features={features} />
+              <CommandsView features={features} />
             </>
           )}
         </div>
@@ -343,6 +347,37 @@ function FunView({ session, features }: { session: MeetingSession; features: Act
         ))}
       </div>
       <p className="muted small">Confetti, party mode and barrel rolls happen on everyone's screen. Dice and coins post in chat.</p>
+    </section>
+  );
+}
+
+function CommandsView({ features }: { features: ActivityFeatures }) {
+  const [cmd, setCmd] = useState('');
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  return (
+    <section className="tools-section">
+      <h3>Commands</h3>
+      <form
+        className="cmd-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!cmd.trim()) return;
+          setResult(features.runCommand(cmd.trim()));
+          setCmd('');
+        }}
+      >
+        <SquareTerminal size={18} />
+        <input value={cmd} onChange={(e) => setCmd(e.target.value)} placeholder="Type a secret command" autoComplete="off" spellCheck={false} aria-label="Secret command" data-testid="cmd-input" />
+        <button className="btn btn-small" type="submit" disabled={!cmd.trim()} data-testid="cmd-run">
+          Run
+        </button>
+      </form>
+      {result && (
+        <p className={`cmd-result ${result.ok ? 'ok' : ''}`} data-testid="cmd-result">
+          {result.text}
+        </p>
+      )}
+      <p className="muted small">Some words do things. Nobody else sees what you type here.</p>
     </section>
   );
 }

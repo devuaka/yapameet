@@ -67,7 +67,7 @@ function pushTree(branch, root, files, extra, message) {
 }
 
 const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
-const trailer = '\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>';
+const trailer = '\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>';
 
 if (process.env.SKIP_SOURCE !== '1') {
   // .github is skipped: pushing workflow files needs a token with the `workflow` scope.
