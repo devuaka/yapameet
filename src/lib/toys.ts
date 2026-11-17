@@ -4,6 +4,7 @@
  *  - toggle: on/off for everyone in the call (late joiners get pulled in too)
  *  - once:   fires once on everyone's screen
  *  - dialog: opens something just for you (Lightning Vanish)
+ *  - all:    switches on everything you have unlocked (and off again)
  * Hints are shown in Settings > Secrets before you find them: keep them vague.
  */
 export type ToyId =
@@ -25,7 +26,16 @@ export type ToyId =
   | 'whoopee'
   | 'ralsei'
   | 'portablegabe'
-  | 'bomboclat';
+  | 'bomboclat'
+  | 'tiny'
+  | 'opposite'
+  | 'underwater'
+  | 'meow'
+  | 'lightsout'
+  | 'rewind'
+  | 'fireworks'
+  | 'encore'
+  | 'wow';
 
 export interface ToyDef {
   id: ToyId;
@@ -34,7 +44,7 @@ export interface ToyDef {
   aliases?: string[];
   name: string;
   emoji: string;
-  kind: 'toggle' | 'once' | 'dialog';
+  kind: 'toggle' | 'once' | 'dialog' | 'all';
   hint: string;
   found: string;
 }
@@ -211,6 +221,87 @@ export const TOYS: ToyDef[] = [
     kind: 'toggle',
     hint: 'When the phonk drops, so does the call.',
     found: 'The song plays, every part of the screen strobes a different colour and everything shakes.',
+  },
+  {
+    id: 'tiny',
+    word: 'tiny',
+    name: 'Pocket Size',
+    emoji: '🤏',
+    kind: 'toggle',
+    hint: 'Honey, I shrunk the call.',
+    found: 'Everyone shrinks to pocket size.',
+  },
+  {
+    id: 'opposite',
+    word: 'opposite',
+    name: 'Opposite Day',
+    emoji: '🔄',
+    kind: 'toggle',
+    hint: 'Today, nothing is what it is. (Or is it?)',
+    found: 'All the colours on the screen turn inside out.',
+  },
+  {
+    id: 'underwater',
+    word: 'underwater',
+    name: 'Under the Sea',
+    emoji: '🫧',
+    kind: 'toggle',
+    hint: 'Hold your breath.',
+    found: 'The call sinks: blue, wobbly, bubbling and muffled.',
+  },
+  {
+    id: 'meow',
+    word: 'meow',
+    name: 'Raining Cats',
+    emoji: '🐈',
+    kind: 'toggle',
+    hint: 'It is raining something, and it is not dogs.',
+    found: "Cats bounce around everyone's screen.",
+  },
+  {
+    id: 'lightsout',
+    word: 'lightsout',
+    name: 'Lights Out',
+    emoji: '🔦',
+    kind: 'toggle',
+    hint: 'Who turned off the... oh.',
+    found: 'The screen goes dark. Everyone gets a flashlight that follows their mouse.',
+  },
+  {
+    id: 'rewind',
+    word: 'rewind',
+    name: 'Rewind',
+    emoji: '📼',
+    kind: 'toggle',
+    hint: 'Be kind.',
+    found: 'The call turns into a worn-out VHS tape.',
+  },
+  {
+    id: 'fireworks',
+    word: 'fireworks',
+    name: 'Fireworks',
+    emoji: '🎆',
+    kind: 'once',
+    hint: 'Remember, remember.',
+    found: "Fireworks go off on everyone's screen.",
+  },
+  {
+    id: 'encore',
+    word: 'encore',
+    name: 'Encore',
+    emoji: '👏',
+    kind: 'once',
+    hint: 'What the crowd shouts when it wants more.',
+    found: 'A stadium cheers for you and confetti rains down.',
+  },
+  {
+    id: 'wow',
+    word: 'wow',
+    name: 'WOW',
+    emoji: '🤯',
+    kind: 'all',
+    hint: 'One small word. Everything you have found, all at once.',
+    found: 'Switches on every secret you have unlocked at once. Use it again to switch them all off.',
   },
 ];
 

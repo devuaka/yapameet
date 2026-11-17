@@ -1,6 +1,7 @@
 import { getSettings } from './settings';
 import { getAudioContext, loadSfx } from './sounds';
 import type { ToyId } from './toys';
+import { fxBus } from './fx';
 
 /** Runs the secret toys' effects on this screen. Syncing between people lives in CallView. */
 
@@ -284,11 +285,113 @@ function startToy(id: ToyId): Stop {
     case 'dizzy':
       playOnce('toy-dizzy');
       return htmlClass('toy-dizzy', true);
+    case 'tiny':
+      playOnce('toy-swoosh');
+      return htmlClass('toy-tiny');
+    case 'opposite':
+      playOnce('toy-bass');
+      return htmlClass('toy-opposite');
+    case 'underwater':
+      return all(bubbles(), htmlClass('toy-underwater'), overlay('toy-sea'), loopSound('toy-underwater', 0.8));
+    case 'meow': {
+      playOnce('toy-meow');
+      const cats = ['🐈', '🐱', '😺', '😸', '🙀', '😻'];
+      return bouncers((size) => `<span style="font-size:${Math.round(size * 0.85)}px">${cats[Math.floor(Math.random() * cats.length)]}</span>`, 14);
+    }
+    case 'lightsout':
+      playOnce('toy-switch');
+      return flashlight();
+    case 'rewind':
+      playOnce('toy-rewind');
+      return all(htmlClass('toy-rewind'), overlay('toy-vhs', true));
     case 'bomboclat':
       return all(htmlClass('toy-bomboclat', true), loopSound('egg-bomboclat', 0.85));
     default:
       return () => {};
   }
+}
+
+function bubbles(): Stop {
+  const list = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), r: 3 + Math.random() * 9, vy: 0.05 + Math.random() * 0.12, w: Math.random() * 6 }));
+  return canvasLayer('toy-bubbles', (g, w, h, dt) => {
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(220, 245, 255, 0.75)';
+    g.lineWidth = 1.5;
+    for (const b of list) {
+      b.y -= b.vy * dt;
+      b.w += dt * 2;
+      if (b.y < -0.05) {
+        b.y = 1.05;
+        b.x = Math.random();
+      }
+      const x = b.x * w + Math.sin(b.w) * 10;
+      g.beginPath();
+      g.arc(x, b.y * h, b.r, 0, Math.PI * 2);
+      g.stroke();
+      g.beginPath();
+      g.arc(x - b.r * 0.35, b.y * h - b.r * 0.35, b.r * 0.25, 0, Math.PI * 2);
+      g.stroke();
+    }
+  });
+}
+
+/** Lights Out: a dark screen with a hole that follows your mouse (or finger). */
+function flashlight(): Stop {
+  const el = document.createElement('div');
+  el.className = 'toy-overlay toy-dark';
+  el.setAttribute('aria-hidden', 'true');
+  el.style.setProperty('--fx', `${window.innerWidth / 2}px`);
+  el.style.setProperty('--fy', `${window.innerHeight / 2}px`);
+  document.body.appendChild(el);
+  const move = (e: PointerEvent) => {
+    el.style.setProperty('--fx', `${e.clientX}px`);
+    el.style.setProperty('--fy', `${e.clientY}px`);
+  };
+  window.addEventListener('pointermove', move);
+  return () => {
+    window.removeEventListener('pointermove', move);
+    el.remove();
+  };
+}
+
+/** A few seconds of fireworks bursting across the screen. */
+function fireworks() {
+  if (!motionOk()) return;
+  type P = { x: number; y: number; vx: number; vy: number; life: number; hue: number };
+  const parts: P[] = [];
+  let bursts = 0;
+  const burst = (w: number, h: number) => {
+    const x = w * (0.15 + Math.random() * 0.7);
+    const y = h * (0.15 + Math.random() * 0.4);
+    const hue = Math.floor(Math.random() * 360);
+    for (let i = 0; i < 90; i++) {
+      const a = (i / 90) * Math.PI * 2;
+      const s = 120 + Math.random() * 220;
+      parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, hue: hue + Math.random() * 40 });
+    }
+  };
+  let t = 0;
+  const stop = canvasLayer('toy-fireworks', (g, w, h, dt) => {
+    t += dt;
+    if (bursts < 9 && t > bursts * 0.4) {
+      burst(w, h);
+      bursts++;
+    }
+    g.clearRect(0, 0, w, h);
+    for (const p of parts) {
+      p.vy += 160 * dt;
+      p.vx *= 0.985;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt * 0.55;
+      if (p.life <= 0) continue;
+      g.fillStyle = `hsla(${p.hue}, 95%, 62%, ${p.life})`;
+      g.beginPath();
+      g.arc(p.x, p.y, 2.6, 0, Math.PI * 2);
+      g.fill();
+    }
+  });
+  window.setTimeout(stop, 5500);
 }
 
 /** One-shot toys. `from` is the participant id that set it off (their tile is where it starts). */
@@ -316,6 +419,14 @@ export function fireToy(id: ToyId, from: string) {
   } else if (id === 'gravity') {
     playOnce('toy-fall');
     flash('toy-gravity', 3300);
+  } else if (id === 'fireworks') {
+    playOnce('toy-fireworks');
+    fireworks();
+  } else if (id === 'encore') {
+    playOnce('toy-cheer');
+    fxBus.emit('confetti');
+  } else if (id === 'wow') {
+    playOnce('toy-wow');
   } else if (id === 'whoopee') {
     playOnce('toy-fart');
     pop('💨', 'toy-pop-puff');

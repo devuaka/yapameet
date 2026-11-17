@@ -1028,35 +1028,51 @@ html.toy-gravity .call-stage .tile:nth-child(3n) {
   left: 0;
   top: 0;
   z-index: 298;
-  width: 78px;
-  height: 150px;
+  width: 92px;
+  height: 178px;
   cursor: crosshair;
   will-change: transform;
   touch-action: none;
+}
+/* the sprite is a still image: the dance is a bounce + sway, flipping left/right every two beats */
+.ralsei-flip {
+  width: 100%;
+  height: 100%;
+  animation: ralsei-flip 0.86s steps(1) infinite;
+}
+@keyframes ralsei-flip {
+  0% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(-1);
+  }
 }
 .ralsei img {
   display: block;
   width: 100%;
   height: 100%;
-  image-rendering: pixelated;
   pointer-events: none;
   transform-origin: 50% 100%;
   filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.4));
-  animation: ralsei-dance 0.43s steps(2) infinite;
+  animation: ralsei-dance 0.43s ease-in-out infinite;
 }
 @keyframes ralsei-dance {
   0% {
-    transform: rotate(-9deg) scale(1.05, 0.95);
+    transform: translateY(0) rotate(-5deg) scale(1.06, 0.92);
   }
-  50% {
-    transform: rotate(9deg) scale(0.95, 1.06) translateY(-10px);
+  45% {
+    transform: translateY(-22px) rotate(4deg) scale(0.96, 1.05);
+  }
+  70% {
+    transform: translateY(-8px) rotate(6deg) scale(1, 1);
   }
   100% {
-    transform: rotate(-9deg) scale(1.05, 0.95);
+    transform: translateY(0) rotate(-5deg) scale(1.06, 0.92);
   }
 }
-.ralsei.bored img {
-  animation: fade 0.5s reverse forwards;
+.ralsei.bored {
+  animation: fade 0.5s ease reverse forwards;
 }
 .ralsei-pulse {
   position: fixed;
@@ -1083,7 +1099,7 @@ html.toy-gravity .call-stage .tile:nth-child(3n) {
   z-index: 299;
   width: 250px;
   height: 358px;
-  margin: -220px 0 0 -125px;
+  margin: -190px 0 0 -125px;
   pointer-events: none;
   background-repeat: no-repeat;
   background-size: 4250px 358px;
@@ -1229,4 +1245,82 @@ html.toy-bomboclat .dock {
 }
 .toy-chip-bomboclat {
   background: #ff004c;
+}
+
+/* Pocket Size */
+html.toy-tiny .call-stage .tile video,
+html.toy-tiny .call-stage .tile .tile-avatar,
+html.toy-tiny .call-stage .tile .bot-img {
+  scale: 0.42;
+  transition: scale 0.4s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+/* Opposite Day */
+html.toy-opposite #root {
+  filter: invert(1) hue-rotate(180deg);
+}
+/* Under the Sea */
+html.toy-underwater .call-stage {
+  animation: sea-wobble 3.2s ease-in-out infinite;
+}
+@keyframes sea-wobble {
+  0%,
+  100% {
+    transform: skew(0, 0) scale(1);
+  }
+  33% {
+    transform: skew(1.4deg, 0.6deg) scale(1.01);
+  }
+  66% {
+    transform: skew(-1.2deg, -0.5deg) scale(0.995);
+  }
+}
+.toy-sea {
+  z-index: 281;
+  background: linear-gradient(180deg, rgb(0, 150, 255), rgb(0, 50, 170));
+  mix-blend-mode: color;
+  opacity: 0.8;
+}
+.toy-bubbles {
+  z-index: 287;
+}
+/* Lights Out */
+.toy-dark {
+  z-index: 289;
+  background: radial-gradient(circle 150px at var(--fx) var(--fy), transparent 0, transparent 60%, rgba(0, 0, 0, 0.96) 100%);
+}
+/* Rewind (VHS) */
+html.toy-rewind .call-stage {
+  filter: saturate(1.5) contrast(1.15) sepia(0.25) blur(0.4px) drop-shadow(3px 0 0 rgba(255, 0, 60, 0.55)) drop-shadow(-3px 0 0 rgba(0, 200, 255, 0.5));
+}
+.toy-vhs {
+  z-index: 288;
+  background:
+    linear-gradient(transparent 0 46%, rgba(255, 255, 255, 0.12) 47%, rgba(255, 255, 255, 0.05) 52%, transparent 53%),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px);
+  background-size: 100% 300%, 100% 100%;
+  animation: vhs-roll 3.4s linear infinite;
+}
+.toy-vhs::after {
+  content: 'PLAY ▶';
+  position: absolute;
+  top: 22px;
+  left: 28px;
+  color: #fff;
+  font: 700 26px var(--font-mono);
+  letter-spacing: 0.08em;
+  text-shadow: 2px 0 rgba(255, 0, 60, 0.7), -2px 0 rgba(0, 200, 255, 0.7);
+}
+@keyframes vhs-roll {
+  from {
+    background-position: 0 100%, 0 0;
+  }
+  to {
+    background-position: 0 -200%, 0 0;
+  }
+}
+.toy-fireworks {
+  z-index: 291;
+}
+.toy-chip-wow {
+  background: var(--grad);
 }

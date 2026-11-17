@@ -50,7 +50,7 @@ import type { ChatMessage, MeetingSession, SessionEvent } from '../rtc/MeetingSe
 import type { LocalMedia } from '../rtc/LocalMedia';
 import { formatDuration, useNow } from '../lib/hooks';
 import { meetingUrl } from '../lib/meetingCode';
-import { findEgg, updateSettings, useSettings } from '../lib/settings';
+import { findEgg, getSettings, updateSettings, useSettings } from '../lib/settings';
 import { isGabenCode } from '../lib/gaben';
 import { setSoundsSink, sounds } from '../lib/sounds';
 import { audioLevels } from '../lib/audioLevel';
@@ -740,7 +740,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             }
             return;
           }
-          if (toy.kind === 'once' && d.fire) {
+          if ((toy.kind === 'once' || toy.kind === 'all') && d.fire) {
             fireToy(toy.id, e.from);
             return;
           }
@@ -769,6 +769,31 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
       if (toy.kind === 'dialog') {
         if (!session.vanish) setVanishOpen(true);
         return true;
+      }
+      if (toy.kind === 'all') {
+        // WOW: everything unlocked at once. If anything is already on, it switches everything off instead.
+        const unlocked = TOYS.filter((t) => t.id !== toy.id && getSettings().eggs.includes(t.id));
+        const anyOn = activeToys().length > 0;
+        fireToy(toy.id, session.selfId);
+        session.sendApp('toy', { id: toy.id, fire: true });
+        if (anyOn) {
+          for (const id of activeToys()) {
+            applyToy(id, false);
+            session.sendApp('toy', { id, on: false });
+          }
+          return false;
+        }
+        for (const t of unlocked) {
+          if (t.kind === 'toggle') {
+            applyToy(t.id, true);
+            session.sendApp('toy', { id: t.id, on: true });
+          } else if (t.kind === 'once') {
+            if (t.id === 'ralsei') playRalsei();
+            else fireToy(t.id, session.selfId);
+            session.sendApp('toy', { id: t.id, fire: true });
+          }
+        }
+        return !anyOn;
       }
       if (toy.id === 'ralsei') {
         playRalsei();
@@ -802,6 +827,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
         return { ok: true, text: `${toy.emoji} ${first ? 'Unlocked' : 'Already yours'}. ${toy.name} is under Secrets, above.` };
       }
       const on = useToy(toy);
+      if (toy.kind === 'all') return { ok: true, text: on ? '🤯 WOW. Everything you have unlocked is on. Use WOW again to stop it all.' : 'Everything is off again.' };
       if (toy.kind === 'once') return { ok: true, text: `${toy.emoji} ${toy.name}! It lives under Secrets now.` };
       return { ok: true, text: on ? `${toy.emoji} ${toy.name} is on for everyone. Switch it off under Secrets.` : `${toy.name} is off.` };
     },
@@ -1084,7 +1110,7 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
                     id: t.word,
                     label: t.id === 'omar' && me.vanish ? 'You are gone…' : t.name,
                     emoji: t.emoji,
-                    on: t.kind === 'toggle' ? toysOn.includes(t.id) : t.kind === 'dialog' ? !!me.vanish : false,
+                    on: t.kind === 'toggle' ? toysOn.includes(t.id) : t.kind === 'dialog' ? !!me.vanish : t.kind === 'all' ? toysOn.length > 0 : false,
                     run: () => void useToy(t),
                   })),
                   secretsTotal: TOYS.length,

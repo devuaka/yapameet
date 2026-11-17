@@ -83,6 +83,11 @@ export function startRalsei(onCatch: () => void) {
   if (running) return;
   running = true;
   catchHandler = onCatch;
+  for (const url of [IMG, BOOM]) {
+    const pre = new Image();
+    pre.src = url;
+    void pre.decode?.().catch(() => {});
+  }
   const timers: number[] = [];
   const stops: (() => void)[] = [];
 
@@ -122,10 +127,10 @@ export function startRalsei(onCatch: () => void) {
       r.setAttribute('role', 'button');
       r.setAttribute('aria-label', 'Catch Ralsei');
       r.dataset.testid = 'ralsei';
-      r.innerHTML = `<img src="${IMG}" alt="" draggable="false" />`;
+      r.innerHTML = `<div class="ralsei-flip"><img src="${IMG}" alt="" draggable="false" /></div>`;
       document.body.appendChild(r);
       ralseiEl = r;
-      const size = { w: 78, h: 150 };
+      const size = { w: 92, h: 178 };
       let x = Math.random() * (window.innerWidth - size.w);
       let y = Math.random() * (window.innerHeight - size.h);
       let a = Math.random() * Math.PI * 2;

@@ -1292,7 +1292,7 @@ async function main() {
       if (!(await A.page.locator('[data-testid="cmd-result"]').innerText()).includes('Nothing happened')) throw new Error('unknown command not rejected');
       await A.page.locator('[data-testid="cmd-input"]').fill('evilflower');
       await A.page.locator('[data-testid="cmd-run"]').click();
-      const isEvil = (p) => p.evaluate(() => document.documentElement.classList.contains('fx-evil'));
+      const isEvil = (p) => p.evaluate(() => document.documentElement.classList.contains('toy-evilflower'));
       await until(async () => (await isEvil(A.page)) && (await isEvil(B.page)), { what: 'red screen on both' });
       await B.page.locator('[data-testid="toy-chip-evilflower"]').waitFor({ timeout: 5000 });
       const laugh = await B.page.evaluate(async () => {
