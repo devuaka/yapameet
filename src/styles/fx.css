@@ -1324,3 +1324,113 @@ html.toy-rewind .call-stage {
 .toy-chip-wow {
   background: var(--grad);
 }
+
+/* ---------------------------------------------------------------- Yikes (jumpscare) */
+.yikes {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  background: #000;
+  pointer-events: none;
+  animation: yikes-flash 0.12s steps(2) 3;
+}
+.yikes-face {
+  width: 106vmin;
+  height: 106vmin;
+  animation:
+    yikes-lunge 0.28s cubic-bezier(0.2, 1.8, 0.4, 1) both,
+    yikes-shake 0.07s linear 0.28s infinite;
+}
+.yikes-face svg {
+  width: 100%;
+  height: 100%;
+}
+.yikes.calm .yikes-face {
+  animation: none;
+}
+.yikes.calm {
+  animation: none;
+}
+.yikes.out {
+  animation: fade 0.4s ease reverse forwards;
+}
+@keyframes yikes-lunge {
+  from {
+    transform: scale(0.15) rotate(-8deg);
+    filter: brightness(3);
+  }
+  to {
+    transform: scale(1) rotate(0);
+    filter: none;
+  }
+}
+@keyframes yikes-shake {
+  0% {
+    transform: translate(0, 0) scale(1.02);
+  }
+  25% {
+    transform: translate(-14px, 8px) scale(1.04);
+  }
+  50% {
+    transform: translate(12px, -10px) scale(1.03);
+  }
+  75% {
+    transform: translate(-8px, -6px) scale(1.05);
+  }
+  100% {
+    transform: translate(0, 0) scale(1.02);
+  }
+}
+@keyframes yikes-flash {
+  50% {
+    background: #a00;
+  }
+}
+.yikes-page {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #000;
+  color: #bbb;
+}
+.yikes-bait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+.yikes-whisper {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  color: #6b6b6b;
+}
+.yikes-whisper.flicker {
+  animation: yikes-flicker 0.9s steps(3) infinite;
+}
+@keyframes yikes-flicker {
+  50% {
+    opacity: 0.2;
+  }
+}
+.yikes-btn {
+  padding: 12px 22px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #0b0b0b;
+  color: #888;
+  font-family: var(--font-mono);
+  letter-spacing: 0.15em;
+  transition: color 0.3s, border-color 0.3s;
+}
+.yikes-btn:hover {
+  color: #c00;
+  border-color: #500;
+}
+.yikes-result {
+  color: var(--text);
+}

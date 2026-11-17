@@ -35,13 +35,16 @@ export type ToyId =
   | 'rewind'
   | 'fireworks'
   | 'encore'
-  | 'wow';
+  | 'wow'
+  | 'yikes';
 
 export interface ToyDef {
   id: ToyId;
   word: string;
   /** Other spellings that also work. */
   aliases?: string[];
+  /** Found by visiting this page instead of typing a word (the word does nothing). */
+  url?: string;
   name: string;
   emoji: string;
   kind: 'toggle' | 'once' | 'dialog' | 'all';
@@ -303,9 +306,19 @@ export const TOYS: ToyDef[] = [
     hint: 'One small word. Everything you have found, all at once.',
     found: 'Switches on every secret you have unlocked at once. Use it again to switch them all off.',
   },
+  {
+    id: 'yikes',
+    word: 'yikes',
+    url: '/yikes',
+    name: 'Yikes',
+    emoji: '👹',
+    kind: 'once',
+    hint: 'Some pages are not on any map. Yikes.',
+    found: 'Jumpscares everyone in the call.',
+  },
 ];
 
 export const findToyByWord = (text: string) => {
   const w = text.toLowerCase().replace(/\s+/g, '');
-  return TOYS.find((t) => t.word === w || t.aliases?.includes(w)) ?? null;
+  return TOYS.find((t) => !t.url && (t.word === w || t.aliases?.includes(w))) ?? null;
 };

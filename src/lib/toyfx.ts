@@ -2,6 +2,7 @@ import { getSettings } from './settings';
 import { getAudioContext, loadSfx } from './sounds';
 import type { ToyId } from './toys';
 import { fxBus } from './fx';
+import { jumpscare } from './jumpscare';
 
 /** Runs the secret toys' effects on this screen. Syncing between people lives in CallView. */
 
@@ -425,6 +426,8 @@ export function fireToy(id: ToyId, from: string) {
   } else if (id === 'encore') {
     playOnce('toy-cheer');
     fxBus.emit('confetti');
+  } else if (id === 'yikes') {
+    jumpscare();
   } else if (id === 'wow') {
     playOnce('toy-wow');
   } else if (id === 'whoopee') {

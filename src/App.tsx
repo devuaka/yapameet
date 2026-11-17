@@ -4,6 +4,7 @@ import { Landing } from './pages/Landing';
 import { MeetingPage } from './pages/Meeting';
 import { SettingsPage } from './pages/Settings';
 import { NotFound } from './pages/NotFound';
+import { YikesPage } from './pages/Yikes';
 import { FxLayer } from './components/FxLayer';
 import { useToast } from './components/Toast';
 import { findEgg, updateSettings, useSettings } from './lib/settings';
@@ -51,6 +52,7 @@ export function App() {
         <Route path="/join" element={<JoinRedirect />} />
         <Route path="/meeting/:code" element={<MeetingPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/yikes" element={<YikesPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <FxLayer />

@@ -67,5 +67,10 @@ export const EGGS: EggInfo[] = [
     hint: 'Some rooms are already taken by a legend.',
     found: 'Use the meeting code "gabenewel". Gabe Newell joins the call and says one of his lines every 36 seconds.',
   },
-  ...TOYS.map((t) => ({ id: t.id, name: t.name, hint: t.hint, found: `Type ${t.word} in Activities > Games > Commands. ${t.found}` })),
+  ...TOYS.map((t) => ({
+    id: t.id,
+    name: t.name,
+    hint: t.hint,
+    found: t.url ? `Visit ${t.url} on the site. ${t.found}` : `Type ${t.word} in Activities > Games > Commands. ${t.found}`,
+  })),
 ];
