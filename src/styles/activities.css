@@ -1002,3 +1002,26 @@
 .cmd-result.ok {
   color: var(--ok);
 }
+
+/* ---------------------------------------------------------------- unlocked secret toys */
+.secret-btn {
+  position: relative;
+}
+.secret-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+.secret-btn.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.secret-on {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}

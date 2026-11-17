@@ -32,7 +32,6 @@ import {
   Video,
   VideoOff,
   WifiOff,
-  Zap,
 } from 'lucide-react';
 import { WhiteboardStore } from '../rtc/whiteboard';
 import { PollStore, TimerStore, formatClock } from '../rtc/collab';
@@ -63,8 +62,9 @@ import { Modal } from './controls';
 import { SettingsView, ShortcutList, type SettingsSection } from './SettingsPanels';
 import { GhostDialog } from './GhostDialog';
 import { VanishDialog } from './VanishDialog';
-import { EVIL_CODE, VANISH_CODE } from '../lib/vanish';
-import { evilPartyOn, startEvilParty, stopEvilParty } from '../lib/evilflower';
+import { TOYS, findToyByWord, type ToyDef, type ToyId } from '../lib/toys';
+import { activeToys, fireToy, setToy, stopAllToys, toyOn } from '../lib/toyfx';
+import { catchRalsei, endRalsei, startRalsei } from '../lib/ralsei';
 import { RemoteAudio } from './media';
 import { ParticipantsPanel } from './ParticipantsPanel';
 import { miniPlayerSupported, useMiniPlayer } from './MiniPlayer';
@@ -705,55 +705,107 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
     }
   };
 
-  // Evil Flower: an endless party with a cackle, switched on and off for everyone at once.
-  const [evil, setEvil] = useState(false);
-  const setEvilParty = useCallback((on: boolean) => {
-    if (on) void startEvilParty();
-    else stopEvilParty();
-    setEvil(on);
-  }, []);
+  // Secret toys (lib/toys.ts): unlocked with a word in Commands, used from Games > Secrets.
+  // Toggles are on/off for everyone at once; one-shots fire on everyone's screen.
+  const [toysOn, setToysOn] = useState<ToyId[]>([]);
+  const applyToy = useCallback(
+    (id: ToyId, on: boolean) => {
+      setToy(id, on);
+      if (id === 'portablegabe') session.setPortableGabe(on);
+      setToysOn(activeToys());
+    },
+    [session],
+  );
+  // Catch Ralsei: whoever clicks him first tells everyone, and he explodes on every screen.
+  const playRalsei = useCallback(() => {
+    startRalsei(() => {
+      session.sendApp('toy', { id: 'ralsei', caught: true });
+      toast('🐐 You caught Ralsei!', 'success');
+    });
+  }, [session, toast]);
   useEffect(
     () =>
       session.onEvent((e) => {
-        if (e.type === 'app' && e.kind === 'evilparty') {
-          const on = !!(e.data as { on?: boolean } | null)?.on;
-          if (on === evilPartyOn()) return;
-          setEvilParty(on);
-          if (!e.isLocal) toast(on ? `🌸 ${e.name} planted an evil flower` : `🥀 ${e.name} stopped the evil party`);
-        } else if (e.type === 'peer-ready' && evilPartyOn()) {
-          // Late joiners get dragged into the party too.
-          session.sendApp('evilparty', { on: true }, e.from);
+        if (e.type === 'app' && e.kind === 'toy') {
+          const d = (e.data ?? {}) as { id?: string; on?: boolean; fire?: boolean; caught?: boolean };
+          const toy = TOYS.find((t) => t.id === d.id);
+          if (!toy) return;
+          if (toy.id === 'ralsei') {
+            if (d.fire) {
+              playRalsei();
+              toast(`🐐 ${e.name} let Ralsei loose. Catch him!`);
+            } else if (d.caught) {
+              catchRalsei();
+              toast(`💥 ${e.name} caught Ralsei`);
+            }
+            return;
+          }
+          if (toy.kind === 'once' && d.fire) {
+            fireToy(toy.id, e.from);
+            return;
+          }
+          if (toy.kind !== 'toggle') return;
+          const on = !!d.on;
+          if (on === toyOn(toy.id)) return;
+          applyToy(toy.id, on);
+          if (!e.isLocal) toast(on ? `${toy.emoji} ${e.name} turned on ${toy.name}` : `${e.name} turned off ${toy.name}`);
+        } else if (e.type === 'peer-ready') {
+          // Late joiners get pulled into whatever is running.
+          for (const id of activeToys()) session.sendApp('toy', { id, on: true }, e.from);
         }
       }),
-    [session, setEvilParty, toast],
+    [session, applyToy, playRalsei, toast],
   );
-  useEffect(() => () => stopEvilParty(), []);
+  useEffect(
+    () => () => {
+      stopAllToys();
+      endRalsei();
+    },
+    [],
+  );
+
+  const useToy = useCallback(
+    (toy: ToyDef): boolean => {
+      if (toy.kind === 'dialog') {
+        if (!session.vanish) setVanishOpen(true);
+        return true;
+      }
+      if (toy.id === 'ralsei') {
+        playRalsei();
+        session.sendApp('toy', { id: toy.id, fire: true });
+        return true;
+      }
+      if (toy.kind === 'once') {
+        fireToy(toy.id, session.selfId);
+        session.sendApp('toy', { id: toy.id, fire: true });
+        return true;
+      }
+      const on = !toyOn(toy.id);
+      applyToy(toy.id, on);
+      session.sendApp('toy', { id: toy.id, on });
+      return on;
+    },
+    [session, applyToy, playRalsei],
+  );
 
   // Secret commands (Activities > Games > Commands). Never sent, so nobody learns the words.
   const runCommand = useCallback(
     (raw: string): { ok: boolean; text: string } => {
-      const text = raw.trim();
-      if (VANISH_CODE.test(text)) {
-        if (findEgg('omar')) {
-          sounds.secret();
-          toast('⚡ Secret toy unlocked: Lightning Vanish. Hit the ⚡ button!', 'success');
-          return { ok: true, text: '⚡ Lightning Vanish unlocked. The ⚡ button is in the bar.' };
-        }
-        return { ok: true, text: 'You already have Lightning Vanish. Hit the ⚡ button.' };
+      const toy = findToyByWord(raw);
+      if (!toy) return { ok: false, text: 'Nothing happened.' };
+      const first = findEgg(toy.id);
+      if (first) {
+        sounds.secret();
+        toast(`${toy.emoji} Secret found: ${toy.name}`, 'success');
       }
-      if (EVIL_CODE.test(text)) {
-        const on = !evilPartyOn();
-        if (on && findEgg('evilflower')) {
-          sounds.secret();
-          toast('🌸 Secret found: Evil Flower', 'success');
-        }
-        setEvilParty(on);
-        session.sendApp('evilparty', { on });
-        return { ok: true, text: on ? '🌸 Evil party on for everyone. Type evilflower again to stop it.' : '🥀 Evil party over.' };
+      if (toy.kind === 'dialog') {
+        return { ok: true, text: `${toy.emoji} ${first ? 'Unlocked' : 'Already yours'}. ${toy.name} is under Secrets, above.` };
       }
-      return { ok: false, text: 'Nothing happened. That is not a command.' };
+      const on = useToy(toy);
+      if (toy.kind === 'once') return { ok: true, text: `${toy.emoji} ${toy.name}! It lives under Secrets now.` };
+      return { ok: true, text: on ? `${toy.emoji} ${toy.name} is on for everyone. Switch it off under Secrets.` : `${toy.name} is off.` };
     },
-    [session, setEvilParty, toast],
+    [useToy, toast],
   );
 
   const onAudioBlocked = useCallback(() => setAudioBlocked(true), []);
@@ -1028,6 +1080,14 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
                   timer: stores.timer,
                   openGhost: () => setGhostOpen(true),
                   runCommand,
+                  secrets: TOYS.filter((t) => s.eggs.includes(t.id)).map((t) => ({
+                    id: t.word,
+                    label: t.id === 'omar' && me.vanish ? 'You are gone…' : t.name,
+                    emoji: t.emoji,
+                    on: t.kind === 'toggle' ? toysOn.includes(t.id) : t.kind === 'dialog' ? !!me.vanish : false,
+                    run: () => void useToy(t),
+                  })),
+                  secretsTotal: TOYS.length,
                   watch: stores.watch,
                   openWatch: () => setStageView('watch'),
                   dg: stores.dg,
@@ -1069,11 +1129,20 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
                 <TimerIcon size={14} /> {formatClock(stores.timer.remaining)}
               </span>
             )}
-            {evil && (
-              <span className="chip evil-chip" title="Evil party (type evilflower in Commands to stop it)" data-testid="evil-chip">
-                🌸 Evil party
-              </span>
-            )}
+            {toysOn.map((id) => {
+              const t = TOYS.find((x) => x.id === id)!;
+              return (
+                <span
+                  key={id}
+                  className={`chip toy-chip toy-chip-${id}`}
+                  title={`${t.name} is on (switch it off in Activities > Games > Secrets)`}
+                  aria-label={`${t.name} is on`}
+                  data-testid={`toy-chip-${id}`}
+                >
+                  {t.emoji}
+                </span>
+              );
+            })}
             {hands > 0 && (
               <span className="chip hand-chip" title="Raised hands">
                 <Hand size={14} /> {hands}
@@ -1133,16 +1202,6 @@ export function CallView({ session, local, onLeave }: { session: MeetingSession;
             {picker && <ReactionPicker onPick={(e) => session.react(e)} onClose={() => setPicker(false)} />}
           </div>
           <CtrlButton icon={<Hand size={22} />} label={session.hand ? 'Lower hand (Ctrl+Alt+H)' : 'Raise hand (Ctrl+Alt+H)'} active={me.hand} onClick={toggleHand} testId="ctrl-hand" className="hand-btn" />
-          {s.eggs.includes('omar') && (
-            <CtrlButton
-              icon={<Zap size={22} />}
-              label={me.vanish ? 'Lightning Vanish (you are gone right now)' : 'Lightning Vanish'}
-              active={!!me.vanish || vanishOpen}
-              onClick={() => !me.vanish && setVanishOpen(true)}
-              testId="ctrl-vanish"
-              className="vanish-btn"
-            />
-          )}
           <div className="pop-wrap">
             <CtrlButton icon={<MoreVertical size={22} />} label="More options" active={menu === 'more'} onClick={() => setMenu(menu === 'more' ? null : 'more')} testId="ctrl-more" />
             {menu === 'more' && <Menu sections={moreMenu} onClose={() => setMenu(null)} align="center" testId="more-menu" anchorTestId="ctrl-more" />}

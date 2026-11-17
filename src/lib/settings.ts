@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import type { ToyId } from './toys';
 
 export type ThemeId =
   | 'midnight'
@@ -31,7 +32,7 @@ export type FilterId =
   | 'pixel';
 export type VoiceFx = 'none' | 'robot' | 'chipmunk' | 'deep' | 'alien' | 'radio' | 'megaphone' | 'cave';
 export type LayoutPref = 'auto' | 'grid' | 'speaker';
-export type EggId = 'ghost' | 'konami' | 'barrelroll' | 'bubblegum' | 'party' | 'gaben' | 'omar' | 'evilflower';
+export type EggId = 'ghost' | 'konami' | 'barrelroll' | 'bubblegum' | 'party' | 'gaben' | ToyId;
 
 export interface Settings {
   displayName: string;

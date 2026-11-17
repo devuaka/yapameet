@@ -1,4 +1,5 @@
 import type { EggId, ThemeId } from './settings';
+import { TOYS } from './toys';
 
 export interface ThemeInfo {
   id: ThemeId;
@@ -28,53 +29,43 @@ export interface EggInfo {
   found: string;
 }
 
+/** Hints are what you see before finding a secret: keep them vague. */
 export const EGGS: EggInfo[] = [
   {
     id: 'ghost',
     name: 'Ghost Protocol',
-    hint: 'Some people never really leave a room. In a call, knock three times on the door.',
+    hint: 'Knock, knock, knock.',
     found: 'Triple-click the logo in a call. Photograph your empty room, and when you leave you fade out of it for everyone.',
   },
   {
     id: 'konami',
     name: 'Old School',
-    hint: 'Gamers of a certain age know the code.',
+    hint: 'Thirty extra lives, if you remember how.',
     found: 'The Konami code (up up down down left right left right B A). Confetti for everyone, plus the Arcade theme.',
   },
   {
     id: 'barrelroll',
     name: 'Barrel Roll',
-    hint: 'Ask the chat to do what a certain fox pilot was always told.',
+    hint: 'A fox once gave some advice.',
     found: 'Type "do a barrel roll" in chat. Everyone\'s screen spins.',
   },
   {
     id: 'bubblegum',
     name: 'Ticklish',
-    hint: 'The logo on the home page is ticklish.',
+    hint: 'Someone on the home page is ticklish.',
     found: 'Click the logo on the home page five times. Unlocks the Bubblegum theme.',
   },
   {
     id: 'party',
     name: 'Party Mode',
-    hint: 'Chat commands start with a slash. One of them is not in /help.',
+    hint: 'Not every slash command admits it exists.',
     found: 'Type /party in chat. Disco lights and confetti for the whole call.',
   },
   {
     id: 'gaben',
     name: 'Lord Gaben',
-    hint: 'Name your meeting after the man who cannot count to three.',
+    hint: 'Some rooms are already taken by a legend.',
     found: 'Use the meeting code "gabenewel". Gabe Newell joins the call and says one of his lines every 36 seconds.',
   },
-  {
-    id: 'omar',
-    name: 'Lightning Vanish',
-    hint: 'The Commands box at the bottom of Games knows a word for what comes before thunder.',
-    found: 'Type lightning in Activities > Games > Commands. Unlocks the ⚡ button: snap your empty room, get struck by lightning and vanish for 15 seconds.',
-  },
-  {
-    id: 'evilflower',
-    name: 'Evil Flower',
-    hint: 'Some flowers just want to watch the world party. Ask the Commands box.',
-    found: 'Type evilflower in Commands: an evil party with a cackle on everyone\'s screen. Type it again to stop it.',
-  },
+  ...TOYS.map((t) => ({ id: t.id, name: t.name, hint: t.hint, found: `Type ${t.word} in Activities > Games > Commands. ${t.found}` })),
 ];

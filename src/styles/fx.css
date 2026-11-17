@@ -24,9 +24,7 @@ html.fx-barrelroll #root {
   }
 }
 html.fx-party .tile video,
-html.fx-party .tile .tile-avatar,
-html.fx-evil .tile video,
-html.fx-evil .tile .tile-avatar {
+html.fx-party .tile .tile-avatar {
   animation: party-hue 1.2s linear infinite;
 }
 html.fx-party .call::before {
@@ -730,43 +728,505 @@ html.fx-flash body::before {
   }
 }
 
-/* ---------------------------------------------------------------- evil flower */
-html.fx-evil .call::before {
-  content: '';
-  position: absolute;
+/* ---------------------------------------------------------------- secret toys (lib/toyfx.ts) */
+.toy-overlay,
+.toy-canvas,
+.bounce-layer {
+  position: fixed;
   inset: 0;
-  z-index: 40;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 18% 28%, rgba(132, 255, 0, 0.26), transparent 32%),
-    radial-gradient(circle at 82% 36%, rgba(168, 0, 255, 0.3), transparent 32%),
-    radial-gradient(circle at 50% 82%, rgba(255, 0, 60, 0.24), transparent 32%);
-  mix-blend-mode: screen;
-  animation: disco 0.7s steps(4) infinite;
 }
-html.fx-evil .call::after {
-  content: '🌸';
-  position: absolute;
-  top: 40%;
-  left: 50%;
-  z-index: 41;
-  font-size: 120px;
-  pointer-events: none;
-  filter: drop-shadow(0 0 30px rgba(168, 0, 255, 0.8)) hue-rotate(60deg);
-  animation: evil-spin 2.4s linear infinite;
-  opacity: 0.35;
+.toy-canvas {
+  width: 100vw;
+  height: 100vh;
+  z-index: 286;
 }
-@keyframes evil-spin {
-  from {
-    transform: translate(-50%, -50%) rotate(0) scale(1);
+.toy-chip {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+  background: var(--surface-3);
+  font-size: 15px;
+}
+.toy-chip-evilflower {
+  background: #b91c1c;
+}
+.toy-chip-chipparty,
+.toy-chip-bananas {
+  background: #d97706;
+  color: #1c1300;
+}
+
+/* Evil Flower: everything turns red and pulses */
+html.toy-evilflower #root {
+  filter: grayscale(1) contrast(1.2);
+}
+.toy-red {
+  z-index: 280;
+  background: radial-gradient(ellipse at center, #ff2a2a 0%, #d40000 60%, #600000 100%);
+  mix-blend-mode: multiply;
+  animation: evil-pulse 1.3s ease-in-out infinite;
+}
+@keyframes evil-pulse {
+  0%,
+  100% {
+    opacity: 0.88;
   }
   50% {
-    transform: translate(-50%, -50%) rotate(180deg) scale(1.25);
-  }
-  to {
-    transform: translate(-50%, -50%) rotate(360deg) scale(1);
+    opacity: 1;
   }
 }
-.evil-chip {
-  background: linear-gradient(135deg, #7c3aed, #16a34a);
+
+/* Chip Party / Going Bananas: things bouncing around the screen */
+.bounce-layer {
+  z-index: 290;
+  overflow: hidden;
+}
+.bouncer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  will-change: transform;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35));
+  animation: fade 0.35s ease backwards;
+}
+.bouncer svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.bouncer span {
+  line-height: 1;
+}
+
+/* Snow Day */
+.toy-frost {
+  z-index: 279;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(200, 230, 255, 0.35) 100%);
+}
+
+/* Stormy */
+html.toy-gloom .call {
+  filter: brightness(0.75) saturate(0.7);
+}
+.toy-rain {
+  z-index: 285;
+  background-image:
+    repeating-linear-gradient(105deg, transparent 0 22px, rgba(180, 210, 255, 0.35) 22px 23px, transparent 23px 47px),
+    repeating-linear-gradient(105deg, transparent 0 31px, rgba(180, 210, 255, 0.22) 31px 32px, transparent 32px 61px);
+  background-size: 300px 300px, 420px 420px;
+  animation: rain-fall 0.45s linear infinite;
+}
+@keyframes rain-fall {
+  to {
+    background-position: -80px 300px, -110px 420px;
+  }
+}
+
+/* Big Head Mode */
+html.toy-bighead .tile video,
+html.toy-bighead .tile .avatar,
+html.toy-bighead .tile .bot-img {
+  scale: 2.1;
+  transform-origin: 50% 38%;
+  transition: scale 0.4s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+/* Deep Fried */
+html.toy-deepfried .tile video,
+html.toy-deepfried .tile .tile-avatar,
+html.toy-deepfried .tile .bot-img {
+  filter: saturate(4) contrast(2.3) brightness(1.15) hue-rotate(-14deg) blur(0.4px);
+}
+
+/* Earthquake */
+html.toy-earthquake .call-stage {
+  animation: quake 0.22s linear infinite;
+}
+@keyframes quake {
+  0% {
+    transform: translate(0, 0) rotate(0);
+  }
+  25% {
+    transform: translate(-7px, 4px) rotate(-0.6deg);
+  }
+  50% {
+    transform: translate(6px, -5px) rotate(0.5deg);
+  }
+  75% {
+    transform: translate(-4px, -3px) rotate(-0.3deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0);
+  }
+}
+
+/* Wake Up (code rain) */
+.toy-matrix {
+  mix-blend-mode: screen;
+  opacity: 0.85;
+}
+html.toy-matrix .tile video,
+html.toy-matrix .tile .tile-avatar,
+html.toy-matrix .tile .bot-img {
+  filter: grayscale(1) sepia(1) hue-rotate(70deg) saturate(3) brightness(0.9);
+}
+
+/* Serious Business */
+html.toy-comicsans,
+html.toy-comicsans * {
+  font-family: 'Comic Sans MS', 'Comic Sans', 'Chalkboard SE', 'Comic Neue', cursive !important;
+}
+
+/* Down Under */
+html.toy-australia .call-stage {
+  transform: rotate(180deg);
+  transition: transform 0.8s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+/* Dizzy */
+html.toy-dizzy .call-stage .tile {
+  animation: dizzy-spin 7s linear infinite;
+}
+html.toy-dizzy .call-stage .tile:nth-child(even) {
+  animation-direction: reverse;
+  animation-duration: 9s;
+}
+@keyframes dizzy-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* one-shots: Honk, Gravity, Whoopee */
+.toy-pop {
+  position: fixed;
+  z-index: 295;
+  pointer-events: none;
+  font-size: 96px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+}
+.toy-pop-honk {
+  animation: honk-pop 1.2s cubic-bezier(0.2, 1.6, 0.4, 1) forwards;
+}
+@keyframes honk-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.2) rotate(-20deg);
+    opacity: 0;
+  }
+  25% {
+    transform: translate(-50%, -50%) scale(1.4) rotate(8deg);
+    opacity: 1;
+  }
+  45% {
+    transform: translate(-50%, -50%) scale(1) rotate(-4deg);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -80%) scale(1);
+    opacity: 0;
+  }
+}
+.toy-pop-puff {
+  animation: puff 1.8s ease-out forwards;
+}
+@keyframes puff {
+  0% {
+    transform: translate(-30%, -20%) scale(0.3);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(40%, -140%) scale(2.2);
+    opacity: 0;
+  }
+}
+html.toy-squash .call-stage {
+  animation: squash 0.5s ease;
+}
+@keyframes squash {
+  30% {
+    transform: scale(1.06, 0.9);
+  }
+  60% {
+    transform: scale(0.97, 1.04);
+  }
+}
+html.toy-gravity .call-stage .tile {
+  animation: fall-away 3.2s cubic-bezier(0.55, 0, 0.45, 1) forwards;
+}
+html.toy-gravity .call-stage .tile:nth-child(2n) {
+  --spin: -38deg;
+  animation-delay: 0.08s;
+}
+html.toy-gravity .call-stage .tile:nth-child(3n) {
+  --spin: 24deg;
+  animation-delay: 0.16s;
+}
+@keyframes fall-away {
+  0% {
+    transform: none;
+  }
+  30% {
+    transform: translateY(120vh) rotate(var(--spin, 30deg));
+  }
+  62% {
+    transform: translateY(120vh) rotate(var(--spin, 30deg));
+  }
+  86% {
+    transform: translateY(-4%) rotate(0);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------- Catch Ralsei (lib/ralsei.ts) */
+.ralsei-box {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 297;
+  width: min(560px, 86vw);
+  padding: 26px 30px;
+  background: #000;
+  border: 5px solid #fff;
+  box-shadow: 0 0 0 4px #000, 0 30px 80px rgba(0, 0, 0, 0.6);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: ralsei-box-in 0.35s steps(4) both;
+}
+.ralsei-box svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.ralsei-box.leaving {
+  animation: ralsei-box-out 0.3s steps(3) forwards;
+}
+@keyframes ralsei-box-in {
+  from {
+    transform: translate(-50%, -50%) scale(0.6);
+    opacity: 0;
+  }
+}
+@keyframes ralsei-box-out {
+  to {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 0;
+  }
+}
+.ralsei {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 298;
+  width: 78px;
+  height: 150px;
+  cursor: crosshair;
+  will-change: transform;
+  touch-action: none;
+}
+.ralsei img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.4));
+  animation: ralsei-dance 0.43s steps(2) infinite;
+}
+@keyframes ralsei-dance {
+  0% {
+    transform: rotate(-9deg) scale(1.05, 0.95);
+  }
+  50% {
+    transform: rotate(9deg) scale(0.95, 1.06) translateY(-10px);
+  }
+  100% {
+    transform: rotate(-9deg) scale(1.05, 0.95);
+  }
+}
+.ralsei.bored img {
+  animation: fade 0.5s reverse forwards;
+}
+.ralsei-pulse {
+  position: fixed;
+  inset: 0;
+  z-index: 284;
+  pointer-events: none;
+  mix-blend-mode: color;
+  opacity: 0;
+  transition: background 0.1s;
+}
+.ralsei-pulse.hit {
+  animation: ralsei-beat 0.43s ease-out;
+}
+@keyframes ralsei-beat {
+  0% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0.18;
+  }
+}
+.ralsei-boom {
+  position: fixed;
+  z-index: 299;
+  width: 250px;
+  height: 358px;
+  margin: -220px 0 0 -125px;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-size: 4250px 358px;
+  image-rendering: pixelated;
+  animation: ralsei-boom 1.7s steps(17) forwards;
+}
+@keyframes ralsei-boom {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -4250px 0;
+  }
+}
+
+/* Bomboclat: every piece of UI strobes, each starting on a different colour, and everything shakes */
+html.toy-bomboclat .call-bar .ctrl,
+html.toy-bomboclat .call-bar .ctrl-caret,
+html.toy-bomboclat .meet-chip,
+html.toy-bomboclat .call-logo,
+html.toy-bomboclat .dock,
+html.toy-bomboclat .chip,
+html.toy-bomboclat .side-panel,
+html.toy-bomboclat .side-head,
+html.toy-bomboclat .act-tile,
+html.toy-bomboclat .fun-btn,
+html.toy-bomboclat .game-card,
+html.toy-bomboclat .pad,
+html.toy-bomboclat .person,
+html.toy-bomboclat .chat-text,
+html.toy-bomboclat .tile-label,
+html.toy-bomboclat .tile,
+html.toy-bomboclat .btn {
+  animation: bc-strobe 0.48s steps(1) infinite !important;
+}
+html.toy-bomboclat .call-bar .ctrl:nth-child(2n), html.toy-bomboclat .call-bar .ctrl:nth-child(3n + 1) { animation-delay: -0.00s !important; }
+html.toy-bomboclat .call-bar .ctrl-caret:nth-child(2n), html.toy-bomboclat .call-bar .ctrl-caret:nth-child(3n + 1) { animation-delay: -0.07s !important; }
+html.toy-bomboclat .meet-chip:nth-child(2n), html.toy-bomboclat .meet-chip:nth-child(3n + 1) { animation-delay: -0.14s !important; }
+html.toy-bomboclat .call-logo:nth-child(2n), html.toy-bomboclat .call-logo:nth-child(3n + 1) { animation-delay: -0.21s !important; }
+html.toy-bomboclat .dock:nth-child(2n), html.toy-bomboclat .dock:nth-child(3n + 1) { animation-delay: -0.28s !important; }
+html.toy-bomboclat .chip:nth-child(2n), html.toy-bomboclat .chip:nth-child(3n + 1) { animation-delay: -0.35s !important; }
+html.toy-bomboclat .side-panel:nth-child(2n), html.toy-bomboclat .side-panel:nth-child(3n + 1) { animation-delay: -0.42s !important; }
+html.toy-bomboclat .side-head:nth-child(2n), html.toy-bomboclat .side-head:nth-child(3n + 1) { animation-delay: -0.01s !important; }
+html.toy-bomboclat .act-tile:nth-child(2n), html.toy-bomboclat .act-tile:nth-child(3n + 1) { animation-delay: -0.08s !important; }
+html.toy-bomboclat .fun-btn:nth-child(2n), html.toy-bomboclat .fun-btn:nth-child(3n + 1) { animation-delay: -0.15s !important; }
+html.toy-bomboclat .game-card:nth-child(2n), html.toy-bomboclat .game-card:nth-child(3n + 1) { animation-delay: -0.22s !important; }
+html.toy-bomboclat .pad:nth-child(2n), html.toy-bomboclat .pad:nth-child(3n + 1) { animation-delay: -0.29s !important; }
+html.toy-bomboclat .person:nth-child(2n), html.toy-bomboclat .person:nth-child(3n + 1) { animation-delay: -0.36s !important; }
+html.toy-bomboclat .chat-text:nth-child(2n), html.toy-bomboclat .chat-text:nth-child(3n + 1) { animation-delay: -0.43s !important; }
+html.toy-bomboclat .tile-label:nth-child(2n), html.toy-bomboclat .tile-label:nth-child(3n + 1) { animation-delay: -0.02s !important; }
+html.toy-bomboclat .tile:nth-child(2n), html.toy-bomboclat .tile:nth-child(3n + 1) { animation-delay: -0.09s !important; }
+html.toy-bomboclat .btn:nth-child(2n), html.toy-bomboclat .btn:nth-child(3n + 1) { animation-delay: -0.16s !important; }
+html.toy-bomboclat .call-bar .ctrl:nth-child(odd),
+html.toy-bomboclat .tile:nth-child(odd),
+html.toy-bomboclat .act-tile:nth-child(odd),
+html.toy-bomboclat .pad:nth-child(odd) {
+  animation-delay: -0.18s !important;
+}
+html.toy-bomboclat .call-bar .ctrl:nth-child(3n),
+html.toy-bomboclat .tile:nth-child(3n),
+html.toy-bomboclat .act-tile:nth-child(3n),
+html.toy-bomboclat .pad:nth-child(3n) {
+  animation-delay: -0.36s !important;
+}
+@keyframes bc-strobe {
+  0.0% {
+    background-color: #ff004c;
+    border-color: #3dff00;
+    color: #fff;
+  }
+  12.5% {
+    background-color: #ff8a00;
+    border-color: #00f0ff;
+    color: #000;
+  }
+  25.0% {
+    background-color: #ffe600;
+    border-color: #0057ff;
+    color: #fff;
+  }
+  37.5% {
+    background-color: #3dff00;
+    border-color: #b300ff;
+    color: #000;
+  }
+  50.0% {
+    background-color: #00f0ff;
+    border-color: #ff00c8;
+    color: #fff;
+  }
+  62.5% {
+    background-color: #0057ff;
+    border-color: #ff004c;
+    color: #000;
+  }
+  75.0% {
+    background-color: #b300ff;
+    border-color: #ff8a00;
+    color: #fff;
+  }
+  87.5% {
+    background-color: #ff00c8;
+    border-color: #ffe600;
+    color: #000;
+  }
+}
+html.toy-bomboclat .tile video,
+html.toy-bomboclat .tile .tile-avatar,
+html.toy-bomboclat .tile .bot-img {
+  animation: bc-hue 0.48s steps(4) infinite;
+}
+@keyframes bc-hue {
+  0% {
+    filter: hue-rotate(0deg) saturate(3);
+  }
+  100% {
+    filter: hue-rotate(360deg) saturate(3);
+  }
+}
+html.toy-bomboclat .call {
+  animation: bc-shake 0.12s linear infinite;
+}
+html.toy-bomboclat .call-body,
+html.toy-bomboclat .dock {
+  animation: bc-shake 0.17s linear infinite reverse;
+}
+@keyframes bc-shake {
+  0% {
+    transform: translate(0, 0) rotate(0);
+  }
+  25% {
+    transform: translate(-5px, 3px) rotate(-0.5deg);
+  }
+  50% {
+    transform: translate(4px, -4px) rotate(0.4deg);
+  }
+  75% {
+    transform: translate(-3px, -2px) rotate(-0.3deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0);
+  }
+}
+.toy-chip-bomboclat {
+  background: #ff004c;
 }

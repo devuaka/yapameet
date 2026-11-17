@@ -327,6 +327,19 @@ export class MeetingSession extends Emitter {
 
   // ---------------------------------------------------------------- local side
 
+  /** Secret "portablegabe": Gabe Newell joins (or leaves) any call. In gabenewel rooms he never leaves. */
+  setPortableGabe(on: boolean) {
+    if (this.left || isGabenCode(this.code)) return;
+    if (on && !this.gaben) {
+      this.gaben = new GabenBot();
+      this.gaben.start();
+    } else if (!on && this.gaben) {
+      this.gaben.stop();
+      this.gaben = null;
+    }
+    this.emit();
+  }
+
   setName(name: string) {
     this.name = name.trim().slice(0, 40) || this.name;
     void this.broadcastState();

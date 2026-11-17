@@ -62,6 +62,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  overflow: hidden;
 }
 .chip {
   flex: none;
@@ -795,12 +796,6 @@
 }
 .ctrl.danger:hover {
   background: #dc2626;
-}
-.ctrl.vanish-btn {
-  color: #facc15;
-}
-.ctrl.vanish-btn.active {
-  background: rgba(250, 204, 21, 0.22);
 }
 .ctrl-split {
   position: relative;

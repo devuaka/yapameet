@@ -1285,7 +1285,7 @@ async function main() {
       }
     });
 
-    await step('Commands: "evilflower" toggles an evil party with a laugh on both screens', async () => {
+    await step('Commands: "evilflower" turns everyone red with the scream; the Secrets button switches it off', async () => {
       await openTools(A.page, 'games');
       await A.page.locator('[data-testid="cmd-input"]').fill('nonsense');
       await A.page.locator('[data-testid="cmd-run"]').click();
@@ -1293,31 +1293,66 @@ async function main() {
       await A.page.locator('[data-testid="cmd-input"]').fill('evilflower');
       await A.page.locator('[data-testid="cmd-run"]').click();
       const isEvil = (p) => p.evaluate(() => document.documentElement.classList.contains('fx-evil'));
-      await until(async () => (await isEvil(A.page)) && (await isEvil(B.page)), { what: 'evil party on both' });
-      await B.page.locator('[data-testid="evil-chip"]').waitFor({ timeout: 5000 });
+      await until(async () => (await isEvil(A.page)) && (await isEvil(B.page)), { what: 'red screen on both' });
+      await B.page.locator('[data-testid="toy-chip-evilflower"]').waitFor({ timeout: 5000 });
       const laugh = await B.page.evaluate(async () => {
         const r = await fetch('/sfx/egg-evilflower.mp3');
         return r.ok ? (await new AudioContext().decodeAudioData(await r.arrayBuffer())).duration : 0;
       });
-      if (laugh < 3) throw new Error('laugh clip missing on B');
-      await A.page.locator('[data-testid="cmd-input"]').fill('EvilFlower');
+      if (laugh < 3) throw new Error('scream clip missing on B');
+      if ((await A.page.locator('[data-testid="secret-evilflower"]').getAttribute('aria-pressed')) !== 'true') throw new Error('Secrets button not shown as on');
+      await A.page.locator('[data-testid="secret-evilflower"]').click();
+      await until(async () => !(await isEvil(A.page)) && !(await isEvil(B.page)), { what: 'red screen off on both' });
+      return `on (command) and off (Secrets button) for both, scream ${laugh.toFixed(1)} s`;
+    });
+
+    await step('Commands: "chipparty" bounces crisps on both screens; the Secrets button sweeps them up', async () => {
+      await openTools(A.page, 'games');
+      await A.page.locator('[data-testid="cmd-input"]').fill('chipparty');
       await A.page.locator('[data-testid="cmd-run"]').click();
-      await until(async () => !(await isEvil(A.page)) && !(await isEvil(B.page)), { what: 'evil party off on both' });
-      return `on and off for both, laugh ${laugh.toFixed(1)} s`;
+      const crisps = (p) => p.locator('.bounce-layer .bouncer').count();
+      await until(async () => (await crisps(A.page)) > 0 && (await crisps(B.page)) > 0, { what: 'crisps on both' });
+      const pos = () => B.page.evaluate(() => document.querySelector('.bounce-layer .bouncer').style.transform);
+      const p1 = await pos();
+      await sleep(300);
+      if (p1 === (await pos())) throw new Error('crisps are not moving');
+      await B.page.locator('[data-testid="toy-chip-chipparty"]').waitFor({ timeout: 5000 });
+      await A.page.locator('[data-testid="secret-chipparty"]').click();
+      await until(async () => (await crisps(A.page)) === 0 && (await crisps(B.page)) === 0, { what: 'crisps gone on both' });
+      return `${16} crisps moving on B, swept up from the Secrets button`;
+    });
+
+    await step('Secrets: "ralsei" runs Catch Ralsei for both and B catches him; "portablegabe" brings Gabe in for both', async () => {
+      await openTools(A.page, 'games');
+      await A.page.locator('[data-testid="cmd-input"]').fill('ralsei');
+      await A.page.locator('[data-testid="cmd-run"]').click();
+      await B.page.locator('.ralsei-box').waitFor({ timeout: 5000 });
+      await B.page.locator('[data-testid="ralsei"]').waitFor({ timeout: 8000 });
+      await A.page.locator('[data-testid="ralsei"]').waitFor({ timeout: 8000 });
+      await B.page.locator('[data-testid="ralsei"]').click({ force: true });
+      await until(async () => (await A.page.locator('[data-testid="ralsei"]').count()) === 0, { what: 'Ralsei gone on A after B caught him' });
+      const boomOnA = await A.page.locator('.ralsei-boom').count();
+      await A.page.locator('[data-testid="cmd-input"]').fill('portablegabe');
+      await A.page.locator('[data-testid="cmd-run"]').click();
+      await B.page.locator('[data-pid="gaben-bot"]').waitFor({ timeout: 8000 });
+      await A.page.locator('[data-testid="secret-portablegabe"]').click();
+      await until(async () => (await B.page.locator('[data-pid="gaben-bot"]').count()) === 0, { what: 'Gabe gone on B' });
+      return `caught by B, explosion on A: ${boomOnA > 0}; Gabe in and out for both`;
     });
 
     await step('Secret toy: "lightning" in Commands unlocks Lightning Vanish, A is struck and vanishes for B, then comes back', async () => {
       await openTools(A.page, 'games');
       await A.page.locator('[data-testid="cmd-input"]').fill('lightning');
       await A.page.locator('[data-testid="cmd-run"]').click();
-      await A.page.locator('[data-testid="ctrl-vanish"]').waitFor({ timeout: 5000 });
-      await closeSide(A.page);
+      await A.page.locator('[data-testid="secret-lightning"]').waitFor({ timeout: 5000 });
       const saved = await A.page.evaluate(() => JSON.parse(localStorage.getItem('yapameet:settings:v1') || '{}').eggs || []);
       if (!saved.includes('omar')) throw new Error('unlock was not saved');
       const leaked = await B.page.evaluate(() => window.__yapameet.getSnapshot().messages.some((m) => /lightning/i.test(m.text)));
       if (leaked) throw new Error('the secret code was sent to B');
-      if (await B.page.locator('[data-testid="ctrl-vanish"]').count()) throw new Error('B got the button without unlocking');
-      await A.page.locator('[data-testid="ctrl-vanish"]').click();
+      await openTools(B.page, 'games');
+      if (await B.page.locator('[data-testid="secret-lightning"]').count()) throw new Error('B got the button without unlocking');
+      await closeSide(B.page);
+      await A.page.locator('[data-testid="secret-lightning"]').click();
       await A.page.locator('[data-testid="vanish-dialog"]').waitFor();
       const tileB = B.page.locator('[data-testid="tile-remote-cam"]');
       await until(async () => (await tileB.getAttribute('data-vanish')) === 'strike', { what: 'strike on B', timeout: 15000, interval: 50 });

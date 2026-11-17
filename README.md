@@ -36,6 +36,7 @@ Free, browser-based video meetings. Create a link, send it, talk. No accounts, n
 - **Auto-framing** that zooms in and follows you; **signal-strength bars** on every tile; `?` shows all shortcuts
 - **Quick fun** (Activities > Games): confetti, party mode, barrel roll, Ghost Protocol, dice, coin
 - **Chat** with emoji picker, typing indicators, new-message previews and slash commands (`/help`)
+- **Secrets**: a Commands box at the bottom of Activities > Games takes secret words that unlock toys for everyone in the call (weather, screen effects, bouncing snacks, a catch-the-character game and more); unlocked toys live under Games > Secrets, and Settings > Secrets has riddles for the rest.
 - **Easter eggs** (Settings > Secrets tracks what you've found). The headline one, Ghost Protocol: photograph your empty room and when you leave, everyone watches you fade out of it
 
 Pages: Home (`/`), Meeting (`/meeting/abc-defg-hij`: lobby, call, and the "you left" screen), Settings (`/settings`). `/new` starts a fresh meeting and `/join?code=...` jumps to one, so old links keep working.
@@ -263,4 +264,4 @@ Two notes from writing the test:
 
 ## Credits
 
-Sound effects are real recordings from [Mixkit](https://mixkit.co/free-sound-effects/) under the Mixkit Sound Effects Free License (public/sfx). Background segmentation and face tracking use Google MediaPipe models. Fonts are Inter and Bricolage Grotesque (SIL Open Font License), bundled through Fontsource. Icons are Lucide.
+Sound effects are real recordings from [Mixkit](https://mixkit.co/free-sound-effects/) under the Mixkit Sound Effects Free License (public/sfx). Background segmentation and face tracking use Google MediaPipe models. Fonts are Inter and Bricolage Grotesque (SIL Open Font License), bundled through Fontsource. Icons are Lucide. The Catch Ralsei secret uses a Ralsei sprite and sounds from DELTARUNE (Toby Fox), supplied by the site owner; the "bomboclat" song and the Gabe Newell clips were supplied by the site owner too.

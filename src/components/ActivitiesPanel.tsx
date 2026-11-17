@@ -57,6 +57,9 @@ export interface ActivityFeatures {
   openGhost: () => void;
   /** Secret commands typed into the box at the bottom of Games. Returns what happened. */
   runCommand: (text: string) => { ok: boolean; text: string };
+  /** Secret toys you have unlocked, shown as buttons under Secrets. */
+  secrets: { id: string; label: string; emoji: string; on: boolean; run: () => void }[];
+  secretsTotal: number;
   watch: WatchStore;
   openWatch: () => void;
   dg: DrawGuessStore;
@@ -111,6 +114,7 @@ export function ActivitiesPanel({
             <>
               <GamesView dg={features.dg} fun={features.fun} polls={features.polls} participants={participants} />
               <FunView session={session} features={features} />
+              <SecretsView features={features} />
               <CommandsView features={features} />
             </>
           )}
@@ -351,6 +355,29 @@ function FunView({ session, features }: { session: MeetingSession; features: Act
   );
 }
 
+function SecretsView({ features }: { features: ActivityFeatures }) {
+  return (
+    <section className="tools-section" data-testid="secrets-section">
+      <h3>
+        Secrets · {features.secrets.length}/{features.secretsTotal}
+      </h3>
+      {features.secrets.length ? (
+        <div className="fun-grid">
+          {features.secrets.map((t) => (
+            <button key={t.id} className={`fun-btn secret-btn ${t.on ? 'on' : ''}`} onClick={t.run} aria-pressed={t.on} data-testid={`secret-${t.id}`}>
+              <span className="secret-emoji">{t.emoji}</span>
+              <span>{t.label}</span>
+              {t.on && <span className="secret-on">ON</span>}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="muted small">Nothing yet. Some words typed below unlock things.</p>
+      )}
+    </section>
+  );
+}
+
 function CommandsView({ features }: { features: ActivityFeatures }) {
   const [cmd, setCmd] = useState('');
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -377,7 +404,7 @@ function CommandsView({ features }: { features: ActivityFeatures }) {
           {result.text}
         </p>
       )}
-      <p className="muted small">Some words do things. Nobody else sees what you type here.</p>
+      <p className="muted small">Some words do things. Nobody sees what you type. Settings has riddles.</p>
     </section>
   );
 }

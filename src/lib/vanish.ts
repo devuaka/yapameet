@@ -11,8 +11,6 @@ export const GONE_MS = 15_000; // only the empty room is shown
 export const BACK_MS = 800; // the room photo fades away and you are back
 export const VANISH_TOTAL_MS = STRIKE_MS + GONE_MS + BACK_MS;
 
-export const VANISH_CODE = /^lightning$/i;
-export const EVIL_CODE = /^evilflower$/i;
 
 export interface Vanish {
   photo: string;
