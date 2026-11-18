@@ -1288,34 +1288,115 @@ html.toy-underwater .call-stage {
   z-index: 289;
   background: radial-gradient(circle 150px at var(--fx) var(--fy), transparent 0, transparent 60%, rgba(0, 0, 0, 0.96) 100%);
 }
-/* Rewind (VHS) */
+/* Rewind (VHS): the picture goes through the SVG filter in toyfx.ts, overlays add the rest */
 html.toy-rewind .call-stage {
-  filter: saturate(1.5) contrast(1.15) sepia(0.25) blur(0.4px) drop-shadow(3px 0 0 rgba(255, 0, 60, 0.55)) drop-shadow(-3px 0 0 rgba(0, 200, 255, 0.5));
+  filter: url(#vhs-filter) saturate(1.35) contrast(1.12) brightness(1.05);
+  animation: vhs-jitter 0.5s steps(1) infinite;
+}
+@keyframes vhs-jitter {
+  0%,
+  100% {
+    transform: none;
+  }
+  12% {
+    transform: translate(1px, -1px);
+  }
+  38% {
+    transform: translate(-2px, 1px) skewX(0.3deg);
+  }
+  64% {
+    transform: translate(0, 2px);
+  }
+  86% {
+    transform: translate(2px, 0) skewX(-0.4deg);
+  }
 }
 .toy-vhs {
+  position: fixed;
+  inset: 0;
   z-index: 288;
-  background:
-    linear-gradient(transparent 0 46%, rgba(255, 255, 255, 0.12) 47%, rgba(255, 255, 255, 0.05) 52%, transparent 53%),
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px);
-  background-size: 100% 300%, 100% 100%;
-  animation: vhs-roll 3.4s linear infinite;
+  pointer-events: none;
+  overflow: hidden;
 }
-.toy-vhs::after {
-  content: 'PLAY ▶';
+.toy-vhs .vhs-static {
   position: absolute;
-  top: 22px;
-  left: 28px;
-  color: #fff;
-  font: 700 26px var(--font-mono);
-  letter-spacing: 0.08em;
-  text-shadow: 2px 0 rgba(255, 0, 60, 0.7), -2px 0 rgba(0, 200, 255, 0.7);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  mix-blend-mode: overlay;
+  opacity: 0.1;
 }
-@keyframes vhs-roll {
-  from {
-    background-position: 0 100%, 0 0;
+.toy-vhs .vhs-scan {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.28) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+}
+.toy-vhs .vhs-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 14%;
+  top: -14%;
+  background: linear-gradient(transparent, rgba(255, 255, 255, 0.1) 35%, rgba(255, 255, 255, 0.28) 50%, rgba(255, 255, 255, 0.08) 65%, transparent);
+  mix-blend-mode: screen;
+  filter: blur(1px);
+  animation: vhs-band 6.5s linear infinite;
+}
+@keyframes vhs-band {
+  0% {
+    top: -14%;
   }
-  to {
-    background-position: 0 -200%, 0 0;
+  70%,
+  100% {
+    top: 110%;
+  }
+}
+.toy-vhs .vhs-head {
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  bottom: 0;
+  height: 4.5%;
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.45) 0 2px, rgba(0, 0, 0, 0.6) 2px 7px, rgba(255, 255, 255, 0.2) 7px 9px, transparent 9px 16px);
+  mix-blend-mode: screen;
+  filter: blur(0.6px);
+  animation: vhs-head 0.18s steps(3) infinite;
+}
+@keyframes vhs-head {
+  33% {
+    transform: translateX(-9px) scaleY(1.2);
+  }
+  66% {
+    transform: translateX(6px) scaleY(0.85);
+  }
+}
+.vhs-osd {
+  position: absolute;
+  color: #f2f2f2;
+  font: 700 clamp(18px, 2.6vw, 30px) / 1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-shadow: 3px 0 rgba(255, 0, 40, 0.75), -3px 0 rgba(0, 190, 255, 0.75), 0 0 6px rgba(255, 255, 255, 0.35);
+  animation: vhs-osd 1.2s steps(1) infinite;
+}
+.vhs-play {
+  top: 4.5%;
+  left: 4%;
+}
+.vhs-sp {
+  top: 4.5%;
+  right: 4%;
+}
+.vhs-date {
+  bottom: 9%;
+  left: 4%;
+  white-space: pre;
+}
+@keyframes vhs-osd {
+  92% {
+    transform: translateX(2px);
+    opacity: 0.85;
   }
 }
 .toy-fireworks {

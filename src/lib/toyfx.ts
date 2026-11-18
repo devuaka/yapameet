@@ -304,7 +304,7 @@ function startToy(id: ToyId): Stop {
       return flashlight();
     case 'rewind':
       playOnce('toy-rewind');
-      return all(htmlClass('toy-rewind'), overlay('toy-vhs', true));
+      return all(htmlClass('toy-rewind'), vhs());
     case 'bomboclat':
       return all(htmlClass('toy-bomboclat', true), loopSound('egg-bomboclat', 0.85));
     default:
@@ -334,6 +334,80 @@ function bubbles(): Stop {
       g.stroke();
     }
   });
+}
+
+/**
+ * Rewind: a worn VHS tape. An SVG filter on the call splits the colour channels and smears
+ * them sideways (chroma bleed), softens the picture and wobbles it with tracking distortion;
+ * on top sit static, a rolling tracking band, head-switching noise at the bottom and a VCR
+ * on-screen display.
+ */
+function vhs(): Stop {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', '0');
+  svg.setAttribute('height', '0');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.style.position = 'absolute';
+  svg.innerHTML = `
+    <filter id="vhs-filter" x="-2%" y="-2%" width="104%" height="104%" color-interpolation-filters="sRGB">
+      <feTurbulence id="vhs-turb" type="fractalNoise" baseFrequency="0.0008 0.09" numOctaves="1" seed="1" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="A" result="wobble"/>
+      <feColorMatrix in="wobble" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>
+      <feOffset in="r" dx="4" dy="0" result="r2"/>
+      <feGaussianBlur in="r2" stdDeviation="3.5 0" result="r3"/>
+      <feColorMatrix in="wobble" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>
+      <feGaussianBlur in="g" stdDeviation="1 0" result="g2"/>
+      <feColorMatrix in="wobble" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>
+      <feOffset in="b" dx="-4" dy="0" result="b2"/>
+      <feGaussianBlur in="b2" stdDeviation="4 0" result="b3"/>
+      <feBlend in="r3" in2="g2" mode="screen" result="rg"/>
+      <feBlend in="rg" in2="b3" mode="screen" result="rgb"/>
+      <feColorMatrix in="rgb" type="matrix"
+        values="1.08 0.06 0 0 0.02  0.02 1.02 0.02 0 0.01  0 0.04 0.92 0 0.03  0 0 0 1 0"/>
+    </filter>`;
+  document.body.appendChild(svg);
+
+  const layer = document.createElement('div');
+  layer.className = 'toy-vhs';
+  layer.setAttribute('aria-hidden', 'true');
+  layer.innerHTML = `
+    <canvas class="vhs-static" width="480" height="270"></canvas>
+    <div class="vhs-scan"></div>
+    <div class="vhs-band"></div>
+    <div class="vhs-head"></div>
+    <div class="vhs-osd vhs-play">PLAY ▶</div>
+    <div class="vhs-osd vhs-sp">SP</div>
+    <div class="vhs-osd vhs-date"></div>`;
+  document.body.appendChild(layer);
+  const date = layer.querySelector<HTMLDivElement>('.vhs-date')!;
+  const canvas = layer.querySelector<HTMLCanvasElement>('.vhs-static')!;
+  const g = canvas.getContext('2d')!;
+  const turb = svg.querySelector('#vhs-turb')!;
+  const img = g.createImageData(canvas.width, canvas.height);
+  const tick = () => {
+    // Fresh static every frame.
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.random() * 255;
+      d[i] = d[i + 1] = d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    // The tracking wobble shifts; now and then it glitches harder.
+    turb.setAttribute('seed', String(Math.floor(Math.random() * 1000)));
+    turb.setAttribute('baseFrequency', `0.0008 ${Math.random() < 0.08 ? 0.02 : 0.09}`);
+    const t = new Date();
+    const h = t.getHours();
+    date.textContent = `${h < 12 ? 'AM' : 'PM'} ${String(h % 12 || 12).padStart(2, ' ')}:${String(t.getMinutes()).padStart(2, '0')}  ${t.toLocaleString('en-US', { month: 'short' }).toUpperCase()}.${String(t.getDate()).padStart(2, '0')} ${t.getFullYear()}`;
+  };
+  tick();
+  const timer = window.setInterval(tick, 90);
+  return () => {
+    clearInterval(timer);
+    layer.remove();
+    svg.remove();
+  };
 }
 
 /** Lights Out: a dark screen with a hole that follows your mouse (or finger). */
