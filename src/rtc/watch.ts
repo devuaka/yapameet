@@ -1,7 +1,13 @@
 import { Emitter } from '../lib/emitter';
 import type { MeetingSession, SessionEvent } from './MeetingSession';
 
-export type WatchSource = { kind: 'youtube'; id: string; title: string } | { kind: 'file'; url: string; title: string };
+export type WatchSource =
+  | { kind: 'youtube'; id: string; title: string }
+  | { kind: 'tiktok'; id: string; title: string }
+  | { kind: 'file'; url: string; title: string };
+
+const TIKTOK_ID = /^\d{8,25}$/;
+const TIKTOK_SHORT = /^(vm|vt)\.tiktok\.com$/i;
 
 type WatchMsg =
   | { op: 'load'; src: WatchSource; pos: number; playing: boolean }
@@ -31,6 +37,11 @@ export function parseWatchUrl(input: string): WatchSource | null {
     const id = yt.match(/^[A-Za-z0-9_-]{11}/)?.[0];
     return id ? { kind: 'youtube', id, title: 'YouTube video' } : null;
   }
+  if (host === 'tiktok.com') {
+    // tiktok.com/@user/video/<id>, /player/v1/<id>, /embed/v2/<id>, /embed/<id>, /v/<id>
+    const id = url.pathname.match(/\/(?:video|photo|player\/v1|embed\/v2|embed|v)\/(\d{8,25})/)?.[1];
+    return id ? { kind: 'tiktok', id, title: 'TikTok' } : null;
+  }
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
   if (url.protocol !== 'https:' && !(local && url.protocol === 'http:')) return null;
   if (FILE_HOSTS.test(url.hostname) || VIDEO_EXT.test(url.pathname) || local) {
@@ -38,6 +49,40 @@ export function parseWatchUrl(input: string): WatchSource | null {
     return { kind: 'file', url: url.href, title: name.slice(0, 80) };
   }
   return null;
+}
+
+/**
+ * Like parseWatchUrl, but also follows TikTok share links (vm.tiktok.com, tiktok.com/t/...) and fetches
+ * TikTok titles, both through TikTok's public oEmbed endpoint (it allows cross-origin requests).
+ */
+export async function resolveWatchUrl(input: string): Promise<WatchSource | null> {
+  const direct = parseWatchUrl(input);
+  if (direct && direct.kind !== 'tiktok') return direct;
+  let url: URL;
+  try {
+    url = new URL(input.trim().startsWith('http') ? input.trim() : `https://${input.trim()}`);
+  } catch {
+    return null;
+  }
+  const host = url.hostname.replace(/^www\.|^m\./, '');
+  const short = TIKTOK_SHORT.test(url.hostname) || (host === 'tiktok.com' && url.pathname.startsWith('/t/'));
+  if (!direct && !short) return null;
+  try {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), 6000);
+    const res = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url.href)}`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return direct;
+    const j = (await res.json()) as { embed_product_id?: string; title?: string; author_name?: string };
+    const id = direct?.kind === 'tiktok' ? direct.id : String(j.embed_product_id ?? '');
+    if (!TIKTOK_ID.test(id)) return direct;
+    const handle = url.pathname.match(/^\/@([\w.]{1,40})\//)?.[1];
+    const by = j.author_name || (handle ? `@${handle}` : '');
+    const title = (j.title?.trim() || (by ? `TikTok by ${by}` : 'TikTok')).slice(0, 120);
+    return { kind: 'tiktok', id, title };
+  } catch {
+    return direct;
+  }
 }
 
 /**
@@ -136,7 +181,14 @@ export class WatchStore extends Emitter {
   private apply(m: WatchMsg, name: string) {
     if (!m || typeof m !== 'object') return;
     if (m.op === 'load' && m.src) {
-      const src = m.src.kind === 'youtube' ? parseWatchUrl(`https://youtu.be/${m.src.id}`) : parseWatchUrl(m.src.url);
+      const src =
+        m.src.kind === 'youtube'
+          ? parseWatchUrl(`https://youtu.be/${m.src.id}`)
+          : m.src.kind === 'tiktok'
+            ? TIKTOK_ID.test(String(m.src.id))
+              ? parseWatchUrl(`https://www.tiktok.com/player/v1/${m.src.id}`)
+              : null
+            : parseWatchUrl(m.src.url);
       if (!src) return; // never play something that doesn't pass our own validation
       const same = this.src && JSON.stringify({ ...this.src, title: '' }) === JSON.stringify({ ...src, title: '' });
       this.src = { ...src, title: String(m.src.title || src.title).slice(0, 120) };

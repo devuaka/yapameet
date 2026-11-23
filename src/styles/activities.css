@@ -624,6 +624,18 @@
   height: 100%;
   border: 0;
 }
+/* TikToks are vertical: a 9:16 column centred in the stage. */
+.tt-frame {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 100%;
+  aspect-ratio: 9 / 16;
+  max-width: 100%;
+  border: 0;
+  background: #000;
+}
 .watch-click {
   position: absolute;
   left: 50%;

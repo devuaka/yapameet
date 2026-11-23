@@ -26,7 +26,7 @@ import { sounds } from '../lib/sounds';
 import { useToast } from '../components/Toast';
 
 const FEATURES = [
-  { icon: <Clapperboard size={20} />, title: 'Watch together', text: 'YouTube or your own video links, perfectly in sync for everyone.', c: '#f43f5e' },
+  { icon: <Clapperboard size={20} />, title: 'Watch together', text: 'YouTube, TikTok or your own video links, in sync for everyone.', c: '#f43f5e' },
   { icon: <Gamepad2 size={20} />, title: 'Games', text: 'Draw & Guess, spin the wheel, rock paper scissors, would you rather.', c: '#8b5cf6' },
   { icon: <PenTool size={20} />, title: 'Whiteboard', text: 'Sketch ideas (or nonsense) together in real time.', c: '#f59e0b' },
   { icon: <Music4 size={20} />, title: 'Soundboard & voices', text: 'Drop sound effects, upload your own, talk like a robot.', c: '#ec4899' },

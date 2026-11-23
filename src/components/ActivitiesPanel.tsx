@@ -44,7 +44,7 @@ import { PollsView } from './PollsPanel';
 import { GamesView } from './GameUI';
 import type { DrawGuessStore, FunStore } from '../rtc/games';
 import { Toggle } from './controls';
-import { parseWatchUrl, type WatchStore } from '../rtc/watch';
+import { resolveWatchUrl, type WatchStore } from '../rtc/watch';
 import { useToast } from './Toast';
 
 export type ActivityView = 'home' | 'games' | 'watch' | 'polls' | 'timer' | 'soundboard' | 'voice';
@@ -138,7 +138,7 @@ export function ActivitiesPanel({
     {
       id: 'watch',
       title: 'Watch together',
-      sub: 'YouTube and videos',
+      sub: 'YouTube, TikTok, videos',
       icon: <Clapperboard size={22} />,
       color: '#fb7185',
       status: features.watch.src ? (features.watch.playing ? 'Playing' : 'Paused') : undefined,
@@ -248,10 +248,17 @@ function WatchPage({ features }: { features: ActivityFeatures }) {
   useEmitter(w);
   const [link, setLink] = useState('');
   const [err, setErr] = useState('');
-  const start = () => {
-    const src = parseWatchUrl(link);
+  const [busy, setBusy] = useState(false);
+  const start = async () => {
+    setBusy(true);
+    const src = await resolveWatchUrl(link);
+    setBusy(false);
+    if (!src && /tiktok\.com/i.test(link)) {
+      setErr("Couldn't open that TikTok link. Open it in your browser and paste the full tiktok.com/@name/video/... address instead.");
+      return;
+    }
     if (!src) {
-      setErr('Paste a YouTube link, a catbox.moe / litterbox link, or a direct https link to an .mp4 / .webm video.');
+      setErr('Paste a YouTube or TikTok link, a catbox.moe / litterbox link, or a direct https link to an .mp4 / .webm video.');
       return;
     }
     setErr('');
@@ -280,14 +287,14 @@ function WatchPage({ features }: { features: ActivityFeatures }) {
         className="watch-form"
         onSubmit={(e) => {
           e.preventDefault();
-          start();
+          void start();
         }}
       >
         <label className="field">
           <span>{w.src ? 'Play something else' : 'Video link'}</span>
           <div className="row-with-button">
-            <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://youtu.be/…" data-testid="watch-url" />
-            <button className="btn btn-primary" type="submit" disabled={!link.trim()} data-testid="watch-start">
+            <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="YouTube or TikTok link…" data-testid="watch-url" />
+            <button className="btn btn-primary" type="submit" disabled={!link.trim() || busy} data-testid="watch-start">
               <Link2 size={15} /> Watch
             </button>
           </div>
